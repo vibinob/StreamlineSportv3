@@ -351,7 +351,8 @@
 			{:else}
 				<!-- List View -->
 				<div class="bg-white rounded-lg shadow-md overflow-hidden">
-					<table class="w-full">
+					<div class="overflow-x-auto">
+						<table class="w-full min-w-[640px]">
 						<thead class="bg-gray-100">
 							<tr>
 								<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -365,6 +366,9 @@
 								</th>
 								<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase w-20">
 									{lang === 'fr' ? 'Ordre' : 'Order'}
+								</th>
+								<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+									{lang === 'fr' ? 'Images' : 'Images'}
 								</th>
 								<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
 									Actions
@@ -410,14 +414,16 @@
 										</div>
 									</td>
 									<td class="px-6 py-4 whitespace-nowrap">
+										<button
+											type="button"
+											onclick={() => goto(`/${lang}/admin/gallery/${gallery.id}/images`)}
+											class="text-green-600 hover:text-green-800"
+										>
+											{lang === 'fr' ? 'Images' : 'Images'}
+										</button>
+									</td>
+									<td class="px-6 py-4 whitespace-nowrap">
 										<div class="flex gap-2">
-											<button
-												type="button"
-												onclick={() => goto(`/${lang}/admin/gallery/${gallery.id}/images`)}
-												class="text-green-600 hover:text-green-800"
-											>
-												{lang === 'fr' ? 'Images' : 'Images'}
-											</button>
 											<button
 												type="button"
 												onclick={() => openEditModal(gallery)}
@@ -438,6 +444,7 @@
 							{/each}
 						</tbody>
 					</table>
+					</div>
 				</div>
 			{/if}
 		{/if}

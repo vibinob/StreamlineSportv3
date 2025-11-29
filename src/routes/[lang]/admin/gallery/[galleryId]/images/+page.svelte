@@ -490,7 +490,8 @@
 			{:else}
 				<!-- List View (Table) -->
 				<div class="bg-white rounded-lg shadow-md overflow-hidden">
-					<table class="w-full">
+					<div class="overflow-x-auto">
+						<table class="w-full min-w-[640px]">
 						<thead class="bg-gray-100">
 							<tr>
 								<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase w-32">
@@ -574,6 +575,7 @@
 							{/each}
 						</tbody>
 					</table>
+					</div>
 				</div>
 			{/if}
 		{/if}
