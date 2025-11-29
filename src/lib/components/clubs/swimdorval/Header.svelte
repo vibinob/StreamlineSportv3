@@ -14,6 +14,7 @@
 	/** @type {{ id:number; parentId:number|null; title:string; url:string; pageTypeId:number; sortOrder:number; children:any[] }[]} */
 	let menuItems = $state([]);
 	let menuLoading = $state(false);
+	/** @type {string | null} */
 	let menuError = $state(null);
 
 	const lang = $derived.by(() => {
@@ -27,11 +28,7 @@
 	// Current path, used to highlight the active menu item.
 	const currentPath = $derived.by(() => $page.url.pathname);
 
-	// Base URL for backend API (sanitize to avoid extra quotes/semicolons from .env)
-	const API_BASE_URL = (() => {
-		const raw = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
-		return raw.trim().replace(/^['"]+|['";]+$/g, '').replace(/\/+$/, '');
-	})();
+	import { fetchMenu } from '$lib/apis/menu-api';
 
 	/**
 	 * Build href for a menu entry, prefixing with language when needed
@@ -84,18 +81,7 @@
 		menuLoading = true;
 		menuError = null;
 
-		const controller = new AbortController();
-
-		// Backend already knows the club from its own env, so only send lang.
-		const url = `${API_BASE_URL}/api/menu?lang=${encodeURIComponent(lang)}`;
-
-		fetch(url, { signal: controller.signal })
-			.then((res) => {
-				if (!res.ok) {
-					throw new Error(`HTTP ${res.status} while fetching menu`);
-				}
-				return res.json();
-			})
+		fetchMenu(lang)
 			.then((data) => {
 				if (!data || !data.success) {
 					menuError = data?.error || 'Failed to load menu';
@@ -105,18 +91,13 @@
 				menuItems = Array.isArray(data.data) ? data.data : [];
 			})
 			.catch((err) => {
-				if (err.name !== 'AbortError') {
-					console.error('Menu fetch error:', err);
-					menuError = err.message;
-				}
+				console.error('Menu fetch error:', err);
+				menuError = err instanceof Error ? err.message : 'Failed to load menu';
 				menuItems = [];
 			})
 			.finally(() => {
 				menuLoading = false;
 			});
-
-		// Cleanup if effect re-runs
-		return () => controller.abort();
 	});
 
 	function toggleMobileMenu() {

@@ -206,6 +206,175 @@ app.get('/api/menu', async (req, res) => {
 	}
 });
 
+// Gallery API endpoints
+// GET /api/gallery - Get all galleries
+app.get('/api/gallery', async (req, res) => {
+	console.log('[Gallery API] GET request received');
+	try {
+		const rows = await query(
+			`SELECT 
+				id,
+				gallery_name_en,
+				gallery_name_fr,
+				description_en,
+				description_fr,
+				\`order\`,
+				member_only,
+				date_created,
+				added_by,
+				date_updated,
+				updated_by,
+				status
+			FROM gallery 
+			WHERE status != 2 
+			ORDER BY \`order\` ASC, id ASC`
+		);
+		console.log('[Gallery API] Query returned', rows.length, 'galleries');
+		res.json({ success: true, data: rows });
+	} catch (error) {
+		console.error('[Gallery API] Error:', error);
+		res.status(500).json({ success: false, error: error.message });
+	}
+});
+
+// GET /api/gallery/:id - Get single gallery
+app.get('/api/gallery/:id', async (req, res) => {
+	const { id } = req.params;
+	console.log('[Gallery API] GET by ID:', id);
+	try {
+		const rows = await query(
+			`SELECT * FROM gallery WHERE id = ? AND status != 2`,
+			[id]
+		);
+		if (rows.length === 0) {
+			return res.status(404).json({ success: false, error: 'Gallery not found' });
+		}
+		res.json({ success: true, data: rows[0] });
+	} catch (error) {
+		console.error('[Gallery API] Error:', error);
+		res.status(500).json({ success: false, error: error.message });
+	}
+});
+
+// POST /api/gallery - Create new gallery
+app.post('/api/gallery', async (req, res) => {
+	console.log('[Gallery API] POST request received:', req.body);
+	try {
+		const {
+			gallery_name_en,
+			gallery_name_fr,
+			description_en,
+			description_fr,
+			order,
+			member_only,
+			added_by
+		} = req.body;
+
+		const result = await query(
+			`INSERT INTO gallery (
+				gallery_name_en, gallery_name_fr, description_en, description_fr,
+				\`order\`, member_only, date_created, added_by, status
+			) VALUES (?, ?, ?, ?, ?, ?, NOW(), ?, 1)`,
+			[
+				gallery_name_en || '',
+				gallery_name_fr || '',
+				description_en || null,
+				description_fr || null,
+				order || 0,
+				member_only || 0,
+				added_by || null
+			]
+		);
+
+		console.log('[Gallery API] Created gallery with ID:', result.insertId);
+		res.json({ success: true, data: { id: result.insertId } });
+	} catch (error) {
+		console.error('[Gallery API] Error:', error);
+		res.status(500).json({ success: false, error: error.message });
+	}
+});
+
+// PUT /api/gallery/:id - Update gallery
+app.put('/api/gallery/:id', async (req, res) => {
+	const { id } = req.params;
+	console.log('[Gallery API] PUT request for ID:', id, req.body);
+	try {
+		const {
+			gallery_name_en,
+			gallery_name_fr,
+			description_en,
+			description_fr,
+			order,
+			member_only,
+			updated_by
+		} = req.body;
+
+		await query(
+			`UPDATE gallery SET
+				gallery_name_en = ?,
+				gallery_name_fr = ?,
+				description_en = ?,
+				description_fr = ?,
+				\`order\` = ?,
+				member_only = ?,
+				date_updated = NOW(),
+				updated_by = ?
+			WHERE id = ? AND status != 2`,
+			[
+				gallery_name_en,
+				gallery_name_fr,
+				description_en,
+				description_fr,
+				order,
+				member_only,
+				updated_by || null,
+				id
+			]
+		);
+
+		console.log('[Gallery API] Updated gallery ID:', id);
+		res.json({ success: true });
+	} catch (error) {
+		console.error('[Gallery API] Error:', error);
+		res.status(500).json({ success: false, error: error.message });
+	}
+});
+
+// DELETE /api/gallery/:id - Soft delete gallery (set status to 2)
+	app.delete('/api/gallery/:id', async (req, res) => {
+		const { id } = req.params;
+		console.log('[Gallery API] DELETE request for ID:', id);
+		try {
+			await query(
+				`UPDATE gallery SET status = 2, date_updated = NOW() WHERE id = ?`,
+				[id]
+			);
+			console.log('[Gallery API] Deleted gallery ID:', id);
+			res.json({ success: true });
+		} catch (error) {
+			console.error('[Gallery API] Error:', error);
+			res.status(500).json({ success: false, error: error.message });
+		}
+	});
+
+	// PUT /api/gallery/:id/order - Update gallery order
+	app.put('/api/gallery/:id/order', async (req, res) => {
+		const { id } = req.params;
+		const { order } = req.body;
+		console.log('[Gallery API] Update order for ID:', id, 'New order:', order);
+		try {
+			await query(
+				`UPDATE gallery SET \`order\` = ?, date_updated = NOW() WHERE id = ? AND status != 2`,
+				[order, id]
+			);
+			console.log('[Gallery API] Updated order for gallery ID:', id);
+			res.json({ success: true });
+		} catch (error) {
+			console.error('[Gallery API] Error:', error);
+			res.status(500).json({ success: false, error: error.message });
+		}
+	});
+
 // Graceful shutdown
 process.on('SIGINT', async () => {
 	console.log('\nShutting down gracefully...');
