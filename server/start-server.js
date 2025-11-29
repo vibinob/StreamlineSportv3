@@ -265,10 +265,16 @@ app.post('/api/gallery', async (req, res) => {
 			gallery_name_fr,
 			description_en,
 			description_fr,
-			order,
 			member_only,
 			added_by
 		} = req.body;
+
+		// Get max order and add 1 to place new gallery at the end
+		const maxOrderResult = await query(
+			`SELECT MAX(\`order\`) as max_order FROM gallery WHERE status != 2`
+		);
+		const maxOrder = maxOrderResult[0]?.max_order || 0;
+		const newOrder = maxOrder + 1;
 
 		const result = await query(
 			`INSERT INTO gallery (
@@ -280,13 +286,13 @@ app.post('/api/gallery', async (req, res) => {
 				gallery_name_fr || '',
 				description_en || null,
 				description_fr || null,
-				order || 0,
+				newOrder,
 				member_only || 0,
 				added_by || null
 			]
 		);
 
-		console.log('[Gallery API] Created gallery with ID:', result.insertId);
+		console.log('[Gallery API] Created gallery with ID:', result.insertId, 'Order:', newOrder);
 		res.json({ success: true, data: { id: result.insertId } });
 	} catch (error) {
 		console.error('[Gallery API] Error:', error);

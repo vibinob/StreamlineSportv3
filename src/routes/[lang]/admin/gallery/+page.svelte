@@ -30,7 +30,7 @@
 	let showDeleteModal = $state(false);
 	/** @type {any | null} */
 	let selectedGallery = $state(null);
-	let viewMode = $state('grid'); // 'grid' or 'list'
+	let viewMode = $state('list'); // 'grid' (Card) or 'list' (Grid)
 
 	// Form state
 	let formData = $state({
@@ -68,7 +68,7 @@
 			gallery_name_fr: '',
 			description_en: '',
 			description_fr: '',
-			order: galleries.length + 1,
+			order: 0,
 			member_only: 0
 		};
 		showAddModal = true;
@@ -104,7 +104,14 @@
 	async function createGallery() {
 		try {
 			/** @type {any} */
-			const galleryData = formData;
+			const galleryData = {
+				gallery_name_en: formData.gallery_name_en,
+				gallery_name_fr: formData.gallery_name_fr,
+				description_en: formData.description_en,
+				description_fr: formData.description_fr,
+				member_only: formData.member_only
+				// order is not sent - backend will calculate max + 1
+			};
 			await createGalleryApi(galleryData);
 			showAddModal = false;
 			await loadGalleries();
@@ -119,7 +126,14 @@
 		if (!selectedGallery) return;
 		try {
 			/** @type {any} */
-			const galleryData = formData;
+			const galleryData = {
+				gallery_name_en: formData.gallery_name_en,
+				gallery_name_fr: formData.gallery_name_fr,
+				description_en: formData.description_en,
+				description_fr: formData.description_fr,
+				member_only: formData.member_only
+				// order is not sent - should be changed via order controls only
+			};
 			await updateGalleryApi(selectedGallery.id, galleryData);
 			showEditModal = false;
 			selectedGallery = null;
@@ -224,14 +238,14 @@
 							onclick={() => (viewMode = 'grid')}
 							class="px-4 py-2 {viewMode === 'grid' ? 'bg-[#1a3a5f] text-white' : 'bg-white text-gray-700'} transition-colors"
 						>
-							Grid
+							Card
 						</button>
 						<button
 							type="button"
 							onclick={() => (viewMode = 'list')}
 							class="px-4 py-2 {viewMode === 'list' ? 'bg-[#1a3a5f] text-white' : 'bg-white text-gray-700'} transition-colors"
 						>
-							List
+							Grid
 						</button>
 					</div>
 					<!-- Add Button -->
@@ -266,19 +280,45 @@
 				</p>
 			</div>
 		{:else}
-			<!-- Gallery Grid/List -->
+			<!-- Gallery Card/Grid -->
 			{#if viewMode === 'grid'}
 				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-					{#each galleries as gallery}
+					{#each galleries as gallery, index}
 						<div class="bg-white rounded-lg shadow-md p-6">
-							<h3 class="text-xl font-bold text-gray-800 mb-2">
-								{lang === 'fr' ? gallery.gallery_name_fr : gallery.gallery_name_en}
-							</h3>
+							<div class="flex justify-between items-start mb-2">
+								<h3 class="text-xl font-bold text-gray-800 flex-1">
+									{lang === 'fr' ? gallery.gallery_name_fr : gallery.gallery_name_en}
+								</h3>
+								<!-- Order Controls -->
+								<div class="flex gap-1 ml-2">
+									<button
+										type="button"
+										onclick={() => moveGalleryUp(gallery)}
+										disabled={index === 0}
+										class="p-1 text-gray-600 hover:text-[#1a3a5f] disabled:text-gray-300 disabled:cursor-not-allowed transition-colors"
+										title={lang === 'fr' ? 'Déplacer vers la gauche' : 'Move left'}
+									>
+										<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+										</svg>
+									</button>
+									<button
+										type="button"
+										onclick={() => moveGalleryDown(gallery)}
+										disabled={index === galleries.length - 1}
+										class="p-1 text-gray-600 hover:text-[#1a3a5f] disabled:text-gray-300 disabled:cursor-not-allowed transition-colors"
+										title={lang === 'fr' ? 'Déplacer vers la droite' : 'Move right'}
+									>
+										<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+										</svg>
+									</button>
+								</div>
+							</div>
 							<p class="text-gray-600 text-sm mb-4">
 								{lang === 'fr' ? gallery.description_fr : gallery.description_en}
 							</p>
-							<div class="flex justify-between items-center text-sm text-gray-500 mb-4">
-								<span>Order: {gallery.order}</span>
+							<div class="flex justify-end items-center text-sm text-gray-500 mb-4">
 								<span>{gallery.member_only ? 'Members Only' : 'Public'}</span>
 							</div>
 							<div class="flex gap-2">
@@ -301,14 +341,11 @@
 					{/each}
 				</div>
 			{:else}
-				<!-- List View -->
+				<!-- Grid View -->
 				<div class="bg-white rounded-lg shadow-md overflow-hidden">
 					<table class="w-full">
 						<thead class="bg-gray-100">
 							<tr>
-								<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase w-20">
-									{lang === 'fr' ? 'Ordre' : 'Order'}
-								</th>
 								<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
 									{lang === 'fr' ? 'Nom' : 'Name'}
 								</th>
@@ -318,6 +355,9 @@
 								<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
 									{lang === 'fr' ? 'Type' : 'Type'}
 								</th>
+								<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase w-20">
+									{lang === 'fr' ? 'Ordre' : 'Order'}
+								</th>
 								<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
 									Actions
 								</th>
@@ -326,6 +366,15 @@
 						<tbody class="divide-y divide-gray-200">
 							{#each galleries as gallery, index}
 								<tr class="hover:bg-gray-50">
+									<td class="px-6 py-4 whitespace-nowrap">
+										{lang === 'fr' ? gallery.gallery_name_fr : gallery.gallery_name_en}
+									</td>
+									<td class="px-6 py-4">
+										{lang === 'fr' ? gallery.description_fr : gallery.description_en}
+									</td>
+									<td class="px-6 py-4 whitespace-nowrap">
+										{gallery.member_only ? 'Members Only' : 'Public'}
+									</td>
 									<td class="px-6 py-4 whitespace-nowrap">
 										<div class="flex flex-col gap-1">
 											<button
@@ -351,15 +400,6 @@
 												</svg>
 											</button>
 										</div>
-									</td>
-									<td class="px-6 py-4 whitespace-nowrap">
-										{lang === 'fr' ? gallery.gallery_name_fr : gallery.gallery_name_en}
-									</td>
-									<td class="px-6 py-4">
-										{lang === 'fr' ? gallery.description_fr : gallery.description_en}
-									</td>
-									<td class="px-6 py-4 whitespace-nowrap">
-										{gallery.member_only ? 'Members Only' : 'Public'}
 									</td>
 									<td class="px-6 py-4 whitespace-nowrap">
 										<div class="flex gap-2">
@@ -439,25 +479,15 @@
 						></textarea>
 					</div>
 				</div>
-				<div class="grid grid-cols-2 gap-4">
-					<div>
-						<label class="block text-sm font-bold mb-2">Order:</label>
-						<input
-							type="number"
-							bind:value={formData.order}
-							class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#1a3a5f]"
-						/>
-					</div>
-					<div>
-						<label class="block text-sm font-bold mb-2">Member Only:</label>
-						<select
-							bind:value={formData.member_only}
-							class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#1a3a5f]"
-						>
-							<option value={0}>Public</option>
-							<option value={1}>Members Only</option>
-						</select>
-					</div>
+				<div>
+					<label class="block text-sm font-bold mb-2">Member Only:</label>
+					<select
+						bind:value={formData.member_only}
+						class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#1a3a5f]"
+					>
+						<option value={0}>Public</option>
+						<option value={1}>Members Only</option>
+					</select>
 				</div>
 				<div class="flex gap-3 justify-end pt-4">
 					<button
@@ -529,25 +559,15 @@
 						></textarea>
 					</div>
 				</div>
-				<div class="grid grid-cols-2 gap-4">
-					<div>
-						<label class="block text-sm font-bold mb-2">Order:</label>
-						<input
-							type="number"
-							bind:value={formData.order}
-							class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#1a3a5f]"
-						/>
-					</div>
-					<div>
-						<label class="block text-sm font-bold mb-2">Member Only:</label>
-						<select
-							bind:value={formData.member_only}
-							class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#1a3a5f]"
-						>
-							<option value={0}>Public</option>
-							<option value={1}>Members Only</option>
-						</select>
-					</div>
+				<div>
+					<label class="block text-sm font-bold mb-2">Member Only:</label>
+					<select
+						bind:value={formData.member_only}
+						class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#1a3a5f]"
+					>
+						<option value={0}>Public</option>
+						<option value={1}>Members Only</option>
+					</select>
 				</div>
 				<div class="flex gap-3 justify-end pt-4">
 					<button
