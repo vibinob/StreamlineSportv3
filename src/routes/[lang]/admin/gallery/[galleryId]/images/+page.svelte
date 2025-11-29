@@ -40,6 +40,9 @@
 	let fileInput = $state(null);
 	let isDragging = $state(false);
 	let viewMode = $state('thumbnail'); // 'thumbnail' or 'list'
+	/** @type {any | null} */
+	let selectedImageForView = $state(null);
+	let showImageModal = $state(false);
 
 	// Load images
 	async function loadImages() {
@@ -237,6 +240,21 @@
 			return `/images/clubs/${CURRENT_CLUB_ID}/gallery/${galleryId}/thumbnail/${filename}`;
 		}
 		return `/images/clubs/${CURRENT_CLUB_ID}/gallery/${galleryId}/${filename}`;
+	}
+
+	// Open image modal
+	/**
+	 * @param {any} image
+	 */
+	function openImageModal(image) {
+		selectedImageForView = image;
+		showImageModal = true;
+	}
+
+	// Close image modal
+	function closeImageModal() {
+		showImageModal = false;
+		selectedImageForView = null;
 	}
 
 	onMount(() => {
@@ -437,15 +455,24 @@
 					{#each images as image}
 						<div class="bg-white rounded-lg shadow-md overflow-hidden">
 							<div class="relative aspect-square">
-								<img
-									src={getImageUrl(image.thumbnail_filename, true)}
-									alt={image.image_filename}
-									class="w-full h-full object-cover"
-									loading="lazy"
-								/>
 								<button
 									type="button"
-									onclick={() => deleteImage(image)}
+									onclick={() => openImageModal(image)}
+									class="w-full h-full p-0 border-0 bg-transparent cursor-pointer"
+								>
+									<img
+										src={getImageUrl(image.thumbnail_filename, true)}
+										alt={image.image_filename}
+										class="w-full h-full object-cover"
+										loading="lazy"
+									/>
+								</button>
+								<button
+									type="button"
+									onclick={(e) => {
+										e.stopPropagation();
+										deleteImage(image);
+									}}
 									class="absolute top-2 right-2 bg-red-600 text-white p-2 rounded-full hover:bg-red-700 transition-colors shadow-lg"
 									title={lang === 'fr' ? 'Supprimer' : 'Delete'}
 								>
@@ -487,12 +514,18 @@
 							{#each images as image, index}
 								<tr class="hover:bg-gray-50">
 									<td class="px-6 py-4">
-										<img
-											src={getImageUrl(image.thumbnail_filename, true)}
-											alt={image.image_filename}
-											class="w-20 h-20 object-cover rounded"
-											loading="lazy"
-										/>
+										<button
+											type="button"
+											onclick={() => openImageModal(image)}
+											class="p-0 border-0 bg-transparent cursor-pointer"
+										>
+											<img
+												src={getImageUrl(image.thumbnail_filename, true)}
+												alt={image.image_filename}
+												class="w-20 h-20 object-cover rounded"
+												loading="lazy"
+											/>
+										</button>
 									</td>
 									<td class="px-6 py-4">
 										<p class="text-sm text-gray-800">{image.image_filename}</p>
@@ -546,6 +579,59 @@
 		{/if}
 	</div>
 </div>
+
+<!-- Image Modal -->
+{#if showImageModal && selectedImageForView}
+	<div
+		class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50"
+		onclick={closeImageModal}
+		role="button"
+		tabindex="0"
+		onkeydown={(e) => {
+			if (e.key === 'Escape') closeImageModal();
+		}}
+		aria-label={lang === 'fr' ? 'Fermer la modal' : 'Close modal'}
+	>
+		<div
+			class="relative max-w-7xl max-h-[90vh] mx-4"
+			role="dialog"
+			aria-modal="true"
+			aria-label={lang === 'fr' ? 'Image en grand' : 'Full size image'}
+			tabindex="-1"
+		>
+			<!-- Close Button -->
+			<button
+				type="button"
+				onclick={closeImageModal}
+				class="absolute -top-10 right-0 text-white hover:text-gray-300 transition-colors"
+				title={lang === 'fr' ? 'Fermer' : 'Close'}
+			>
+				<svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+				</svg>
+			</button>
+			<!-- Image Container (prevents backdrop click from closing) -->
+			<div
+				onclick={(e) => e.stopPropagation()}
+				onkeydown={(e) => e.stopPropagation()}
+				role="presentation"
+			>
+				<img
+					src={getImageUrl(selectedImageForView.image_filename, false)}
+					alt={selectedImageForView.image_filename}
+					class="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+				/>
+			</div>
+			<!-- Image Info -->
+			<div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white p-4 rounded-b-lg">
+				<p class="text-sm font-medium">{selectedImageForView.image_filename}</p>
+				<p class="text-xs text-gray-300 mt-1">
+					{new Date(selectedImageForView.date_created).toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-US')}
+				</p>
+			</div>
+		</div>
+	</div>
+{/if}
 
 <AdminFooter />
 
