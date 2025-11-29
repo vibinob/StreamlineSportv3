@@ -419,8 +419,7 @@ app.put('/api/gallery/:id', async (req, res) => {
 		}
 	});
 
-	// ==================== Gallery Images API ====================
-
+	// ==================== Multer Configuration ====================
 	// Configure multer for file uploads (memory storage)
 	const upload = multer({
 		storage: multer.memoryStorage(),
@@ -435,6 +434,273 @@ app.put('/api/gallery/:id', async (req, res) => {
 			cb(new Error('Only image files are allowed'));
 		}
 	});
+
+	// ==================== Slider API ====================
+	// GET /api/slider - Get all sliders
+	app.get('/api/slider', async (req, res) => {
+		console.log('[Slider API] GET request received');
+		try {
+			const rows = await query(
+				`SELECT 
+					id,
+					image_en,
+					image_fr,
+					link_en,
+					link_fr,
+					\`order\`,
+					status,
+					date_created,
+					added_by,
+					date_updated,
+					updated_by
+				FROM slider 
+				WHERE status != 2 
+				ORDER BY \`order\` ASC, id ASC`
+			);
+			console.log('[Slider API] Query returned', rows.length, 'sliders');
+			res.json({ success: true, data: rows });
+		} catch (error) {
+			console.error('[Slider API] Error:', error);
+			res.status(500).json({ success: false, error: error.message });
+		}
+	});
+
+	// GET /api/slider/:id - Get single slider
+	app.get('/api/slider/:id', async (req, res) => {
+		const { id } = req.params;
+		console.log('[Slider API] GET by ID:', id);
+		try {
+			const rows = await query(
+				`SELECT * FROM slider WHERE id = ? AND status != 2`,
+				[id]
+			);
+			if (rows.length === 0) {
+				return res.status(404).json({ success: false, error: 'Slider not found' });
+			}
+			res.json({ success: true, data: rows[0] });
+		} catch (error) {
+			console.error('[Slider API] Error:', error);
+			res.status(500).json({ success: false, error: error.message });
+		}
+	});
+
+	// Helper function to get slider images directory
+	function getSliderImagesPath(clubId) {
+		const basePath = path.join(__dirname, '..', 'static', 'images', 'clubs', clubId, 'slider');
+		return basePath;
+	}
+
+	// Helper function to ensure slider directory exists
+	function ensureSliderDirectoryExists(basePath) {
+		if (!fs.existsSync(basePath)) {
+			fs.mkdirSync(basePath, { recursive: true });
+		}
+	}
+
+	// POST /api/slider - Create new slider with image uploads
+	app.post('/api/slider', upload.fields([{ name: 'image_en', maxCount: 1 }, { name: 'image_fr', maxCount: 1 }]), async (req, res) => {
+		console.log('[Slider API] POST request received');
+		const { link_en, link_fr, club_id } = req.body;
+
+		if (!club_id) {
+			return res.status(400).json({ success: false, error: 'Club ID is required' });
+		}
+
+		try {
+			const sliderPath = getSliderImagesPath(club_id);
+			ensureSliderDirectoryExists(sliderPath);
+
+			let imageEnFilename = null;
+			let imageFrFilename = null;
+
+			// Process image_en
+			if (req.files && req.files['image_en'] && req.files['image_en'][0]) {
+				const file = req.files['image_en'][0];
+				const timestamp = Date.now();
+				const ext = path.extname(file.originalname);
+				imageEnFilename = `slider_en_${timestamp}${ext}`;
+				const imagePath = path.join(sliderPath, imageEnFilename);
+				await fs.promises.writeFile(imagePath, file.buffer);
+				console.log('[Slider API] Saved image_en:', imageEnFilename);
+			}
+
+			// Process image_fr
+			if (req.files && req.files['image_fr'] && req.files['image_fr'][0]) {
+				const file = req.files['image_fr'][0];
+				const timestamp = Date.now();
+				const ext = path.extname(file.originalname);
+				imageFrFilename = `slider_fr_${timestamp}${ext}`;
+				const imagePath = path.join(sliderPath, imageFrFilename);
+				await fs.promises.writeFile(imagePath, file.buffer);
+				console.log('[Slider API] Saved image_fr:', imageFrFilename);
+			}
+
+			if (!imageEnFilename || !imageFrFilename) {
+				return res.status(400).json({ success: false, error: 'Both image_en and image_fr are required' });
+			}
+
+			// Get max order
+			const maxOrderResult = await query(`SELECT MAX(\`order\`) as max_order FROM slider WHERE status != 2`);
+			const maxOrder = maxOrderResult[0]?.max_order ?? 0;
+			const newOrder = maxOrder + 1;
+
+			const result = await query(
+				`INSERT INTO slider (image_en, image_fr, link_en, link_fr, \`order\`, date_created, status) 
+				VALUES (?, ?, ?, ?, ?, NOW(), 1)`,
+				[imageEnFilename, imageFrFilename, link_en || null, link_fr || null, newOrder]
+			);
+			console.log('[Slider API] Created slider with ID:', result.insertId, 'Order:', newOrder);
+			res.json({ success: true, data: { id: result.insertId } });
+		} catch (error) {
+			console.error('[Slider API] Error:', error);
+			res.status(500).json({ success: false, error: error.message });
+		}
+	});
+
+	// PUT /api/slider/:id - Update slider with optional image uploads
+	app.put('/api/slider/:id', upload.fields([{ name: 'image_en', maxCount: 1 }, { name: 'image_fr', maxCount: 1 }]), async (req, res) => {
+		const { id } = req.params;
+		console.log('[Slider API] PUT request for ID:', id);
+		const { link_en, link_fr, status, club_id } = req.body;
+
+		if (!club_id) {
+			return res.status(400).json({ success: false, error: 'Club ID is required' });
+		}
+
+		try {
+			// Get existing slider to check current filenames
+			const existingRows = await query(`SELECT image_en, image_fr FROM slider WHERE id = ? AND status != 2`, [id]);
+			if (existingRows.length === 0) {
+				return res.status(404).json({ success: false, error: 'Slider not found' });
+			}
+			const existing = existingRows[0];
+
+			const sliderPath = getSliderImagesPath(club_id);
+			ensureSliderDirectoryExists(sliderPath);
+
+			const updateFields = [];
+			const updateValues = [];
+
+			// Process image_en if uploaded
+			if (req.files && req.files['image_en'] && req.files['image_en'][0]) {
+				const file = req.files['image_en'][0];
+				const timestamp = Date.now();
+				const ext = path.extname(file.originalname);
+				const imageEnFilename = `slider_en_${timestamp}${ext}`;
+				const imagePath = path.join(sliderPath, imageEnFilename);
+				await fs.promises.writeFile(imagePath, file.buffer);
+
+				// Delete old image if it exists
+				if (existing.image_en) {
+					const oldImagePath = path.join(sliderPath, existing.image_en);
+					try {
+						if (fs.existsSync(oldImagePath)) {
+							await fs.promises.unlink(oldImagePath);
+						}
+					} catch (fileError) {
+						console.warn('[Slider API] Error deleting old image_en:', fileError);
+					}
+				}
+
+				updateFields.push('image_en = ?');
+				updateValues.push(imageEnFilename);
+				console.log('[Slider API] Updated image_en:', imageEnFilename);
+			}
+
+			// Process image_fr if uploaded
+			if (req.files && req.files['image_fr'] && req.files['image_fr'][0]) {
+				const file = req.files['image_fr'][0];
+				const timestamp = Date.now();
+				const ext = path.extname(file.originalname);
+				const imageFrFilename = `slider_fr_${timestamp}${ext}`;
+				const imagePath = path.join(sliderPath, imageFrFilename);
+				await fs.promises.writeFile(imagePath, file.buffer);
+
+				// Delete old image if it exists
+				if (existing.image_fr) {
+					const oldImagePath = path.join(sliderPath, existing.image_fr);
+					try {
+						if (fs.existsSync(oldImagePath)) {
+							await fs.promises.unlink(oldImagePath);
+						}
+					} catch (fileError) {
+						console.warn('[Slider API] Error deleting old image_fr:', fileError);
+					}
+				}
+
+				updateFields.push('image_fr = ?');
+				updateValues.push(imageFrFilename);
+				console.log('[Slider API] Updated image_fr:', imageFrFilename);
+			}
+
+			if (link_en !== undefined) {
+				updateFields.push('link_en = ?');
+				updateValues.push(link_en || null);
+			}
+			if (link_fr !== undefined) {
+				updateFields.push('link_fr = ?');
+				updateValues.push(link_fr || null);
+			}
+			if (status !== undefined) {
+				updateFields.push('status = ?');
+				updateValues.push(status);
+			}
+
+			if (updateFields.length === 0) {
+				return res.status(400).json({ success: false, error: 'No fields to update' });
+			}
+
+			updateFields.push('date_updated = NOW()');
+			updateValues.push(id);
+
+			await query(
+				`UPDATE slider SET ${updateFields.join(', ')} WHERE id = ? AND status != 2`,
+				updateValues
+			);
+			console.log('[Slider API] Updated slider ID:', id);
+			res.json({ success: true });
+		} catch (error) {
+			console.error('[Slider API] Error:', error);
+			res.status(500).json({ success: false, error: error.message });
+		}
+	});
+
+	// DELETE /api/slider/:id - Delete slider (soft delete)
+	app.delete('/api/slider/:id', async (req, res) => {
+		const { id } = req.params;
+		console.log('[Slider API] DELETE request for ID:', id);
+		try {
+			await query(
+				`UPDATE slider SET status = 2, date_updated = NOW() WHERE id = ?`,
+				[id]
+			);
+			console.log('[Slider API] Deleted slider ID:', id);
+			res.json({ success: true });
+		} catch (error) {
+			console.error('[Slider API] Error:', error);
+			res.status(500).json({ success: false, error: error.message });
+		}
+	});
+
+	// PUT /api/slider/:id/order - Update slider order
+	app.put('/api/slider/:id/order', async (req, res) => {
+		const { id } = req.params;
+		const { order } = req.body;
+		console.log('[Slider API] Update order for ID:', id, 'New order:', order);
+		try {
+			await query(
+				`UPDATE slider SET \`order\` = ?, date_updated = NOW() WHERE id = ? AND status != 2`,
+				[order, id]
+			);
+			console.log('[Slider API] Updated order for slider ID:', id);
+			res.json({ success: true });
+		} catch (error) {
+			console.error('[Slider API] Error:', error);
+			res.status(500).json({ success: false, error: error.message });
+		}
+	});
+
+	// ==================== Gallery Images API ====================
 
 	// Helper function to get gallery images directory
 	function getGalleryImagesPath(clubId, galleryId) {
@@ -642,7 +908,8 @@ try {
 		console.log(`  - Health: http://localhost:${PORT}/api/health`);
 		console.log(`  - DB Test: http://localhost:${PORT}/api/test-db`);
 		console.log(`  - Menu: http://localhost:${PORT}/api/menu?lang=fr`);
-		console.log(`  - Public Gallery: http://localhost:${PORT}/api/public/gallery\n`);
+		console.log(`  - Public Gallery: http://localhost:${PORT}/api/public/gallery`);
+		console.log(`  - Slider: http://localhost:${PORT}/api/slider\n`);
 	});
 } catch (error) {
 	console.error('Failed to start server:', error);
