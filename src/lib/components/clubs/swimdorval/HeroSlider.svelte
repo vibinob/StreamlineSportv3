@@ -74,18 +74,36 @@
 			{/each}
 		</div>
 		<button
-			class="absolute top-1/2 -translate-y-1/2 left-0 bg-black/50 border-0 text-white text-4xl px-5 py-4 cursor-pointer z-10 transition-colors hover:bg-black/70"
+			class="absolute top-1/2 -translate-y-1/2 left-4 bg-black/40 backdrop-blur-sm border border-white/20 text-white text-3xl w-12 h-12 rounded-full cursor-pointer z-10 transition-all duration-300 hover:bg-black/60 hover:scale-110 hover:border-white/40 shadow-lg hover:shadow-xl flex items-center justify-center"
 			onclick={prevSlide}
 			aria-label="Previous slide"
 		>
-			<span>‹</span>
+			<svg
+				xmlns="http://www.w3.org/2000/svg"
+				fill="none"
+				viewBox="0 0 24 24"
+				stroke="currentColor"
+				stroke-width="2.5"
+				class="w-6 h-6"
+			>
+				<path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+			</svg>
 		</button>
 		<button
-			class="absolute top-1/2 -translate-y-1/2 right-0 bg-black/50 border-0 text-white text-4xl px-5 py-4 cursor-pointer z-10 transition-colors hover:bg-black/70"
+			class="absolute top-1/2 -translate-y-1/2 right-4 bg-black/40 backdrop-blur-sm border border-white/20 text-white text-3xl w-12 h-12 rounded-full cursor-pointer z-10 transition-all duration-300 hover:bg-black/60 hover:scale-110 hover:border-white/40 shadow-lg hover:shadow-xl flex items-center justify-center"
 			onclick={nextSlide}
 			aria-label="Next slide"
 		>
-			<span>›</span>
+			<svg
+				xmlns="http://www.w3.org/2000/svg"
+				fill="none"
+				viewBox="0 0 24 24"
+				stroke="currentColor"
+				stroke-width="2.5"
+				class="w-6 h-6"
+			>
+				<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+			</svg>
 		</button>
 		<div class="absolute bottom-10 md:bottom-10 right-[15%] md:right-[10%] z-10">
 			<a href="/{lang}/essais" class="join-button">

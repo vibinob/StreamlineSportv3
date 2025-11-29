@@ -16,6 +16,9 @@
 		return 'fr';
 	});
 
+	// Current path, used to highlight the active menu item.
+	const currentPath = $derived.by(() => $page.url.pathname);
+
 	// Subscribe to language tag store to make messages reactive
 	// This ensures components re-render when language changes
 	const languageStore = languageTagStore();
@@ -47,6 +50,11 @@
 
 	function toggleMobileMenu() {
 		mobileMenuOpen = !mobileMenuOpen;
+	}
+
+	function handleNavClick() {
+		// Close mobile menu after navigating on small screens
+		mobileMenuOpen = false;
 	}
 
 	function toggleLanguageDropdown() {
@@ -166,7 +174,8 @@
 					<span class="w-6 h-0.5 bg-white my-1 transition-all"></span>
 				</button>
 				<ul
-					class="hidden md:flex list-none m-0 p-0 gap-0 items-center justify-end"
+					class="list-none m-0 p-0 gap-0 items-center justify-end"
+					class:hidden={!mobileMenuOpen}
 					class:flex={mobileMenuOpen}
 					class:flex-col={mobileMenuOpen}
 					class:absolute={mobileMenuOpen}
@@ -176,11 +185,17 @@
 					class:bg-black={mobileMenuOpen}
 					class:shadow-md={mobileMenuOpen}
 					class:z-[1000]={mobileMenuOpen}
+					class:md:flex={true}
+					class:md:static={true}
+					class:md:bg-transparent={true}
+					class:md:shadow-none={true}
 				>
 					<li class="relative">
 						<a
 							href="/{lang}"
+							onclick={handleNavClick}
 							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
+							class:border-[#F45E12]={currentPath === `/${lang}` || currentPath === `/${lang}/`}
 						>
 							{t(m.nav_home)}
 						</a>
@@ -188,7 +203,9 @@
 					<li class="relative">
 						<a
 							href="/{lang}/our-program"
-							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-[#F45E12] transition-colors hover:border-[#F45E12]"
+							onclick={handleNavClick}
+							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
+							class:border-[#F45E12]={currentPath.startsWith(`/${lang}/our-program`)}
 						>
 							{t(m.nav_ourProgram)}
 						</a>
@@ -196,6 +213,7 @@
 					<li class="relative">
 						<a
 							href="/{lang}/our-meets"
+							onclick={handleNavClick}
 							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
 						>
 							{t(m.nav_ourMeets)}
@@ -204,6 +222,7 @@
 					<li class="relative">
 						<a
 							href="/{lang}/tryouts"
+							onclick={handleNavClick}
 							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
 						>
 							{t(m.nav_tryouts)}
@@ -212,6 +231,7 @@
 					<li class="relative">
 						<a
 							href="/{lang}/club-records"
+							onclick={handleNavClick}
 							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
 						>
 							{t(m.nav_clubRecords)}
@@ -220,6 +240,7 @@
 					<li class="relative">
 						<a
 							href="/{lang}/coaches"
+							onclick={handleNavClick}
 							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
 						>
 							{t(m.nav_coaches)}
@@ -228,6 +249,7 @@
 					<li class="relative">
 						<a
 							href="/{lang}/news"
+							onclick={handleNavClick}
 							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
 						>
 							{t(m.nav_news)}
@@ -236,6 +258,7 @@
 					<li class="relative">
 						<a
 							href="/{lang}/gallery"
+							onclick={handleNavClick}
 							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
 						>
 							{t(m.nav_gallery)}
@@ -244,6 +267,7 @@
 					<li class="relative">
 						<a
 							href="/{lang}/contact"
+							onclick={handleNavClick}
 							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
 						>
 							{t(m.nav_contact)}

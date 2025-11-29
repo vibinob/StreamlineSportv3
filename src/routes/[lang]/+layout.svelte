@@ -3,6 +3,8 @@
 	import { setLanguageTag } from '$lib/paraglide/runtime';
 	import '../../app.css';
 
+	let { children } = $props();
+
 	const lang = $derived.by(() => {
 		const paramLang = $page.params.lang;
 		if (paramLang === 'en' || paramLang === 'fr') {
@@ -16,5 +18,5 @@
 	});
 </script>
 
-<slot />
+{@render children()}
 
