@@ -1,6 +1,14 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import multer from 'multer';
+import sharp from 'sharp';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Load environment variables first
 dotenv.config();
@@ -377,6 +385,178 @@ app.put('/api/gallery/:id', async (req, res) => {
 			res.json({ success: true });
 		} catch (error) {
 			console.error('[Gallery API] Error:', error);
+			res.status(500).json({ success: false, error: error.message });
+		}
+	});
+
+	// ==================== Gallery Images API ====================
+
+	// Configure multer for file uploads (memory storage)
+	const upload = multer({
+		storage: multer.memoryStorage(),
+		limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+		fileFilter: (req, file, cb) => {
+			const allowedTypes = /jpeg|jpg|png|gif|webp/;
+			const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+			const mimetype = allowedTypes.test(file.mimetype);
+			if (extname && mimetype) {
+				return cb(null, true);
+			}
+			cb(new Error('Only image files are allowed'));
+		}
+	});
+
+	// Helper function to get gallery images directory
+	function getGalleryImagesPath(clubId, galleryId) {
+		const basePath = path.join(__dirname, '..', 'static', 'images', 'clubs', clubId, 'gallery', String(galleryId));
+		const thumbnailPath = path.join(basePath, 'thumbnail');
+		return { basePath, thumbnailPath };
+	}
+
+	// Helper function to ensure directories exist
+	function ensureDirectoriesExist(basePath, thumbnailPath) {
+		if (!fs.existsSync(basePath)) {
+			fs.mkdirSync(basePath, { recursive: true });
+		}
+		if (!fs.existsSync(thumbnailPath)) {
+			fs.mkdirSync(thumbnailPath, { recursive: true });
+		}
+	}
+
+	// GET /api/gallery/:galleryId/images - Get all images for a gallery
+	app.get('/api/gallery/:galleryId/images', async (req, res) => {
+		const { galleryId } = req.params;
+		console.log('[Gallery Images API] GET request for gallery ID:', galleryId);
+		try {
+			const rows = await query(
+				`SELECT * FROM gallery_images WHERE gallery_id = ? AND status != 2 ORDER BY \`order\` ASC, date_created ASC`,
+				[galleryId]
+			);
+			console.log('[Gallery Images API] Found', rows.length, 'images');
+			res.json({ success: true, data: rows });
+		} catch (error) {
+			console.error('[Gallery Images API] Error:', error);
+			res.status(500).json({ success: false, error: error.message });
+		}
+	});
+
+	// POST /api/gallery/:galleryId/images - Upload image
+	app.post('/api/gallery/:galleryId/images', upload.single('image'), async (req, res) => {
+		const { galleryId } = req.params;
+		const { club_id } = req.body;
+		console.log('[Gallery Images API] POST request for gallery ID:', galleryId, 'Club ID:', club_id);
+
+		if (!req.file) {
+			return res.status(400).json({ success: false, error: 'No image file provided' });
+		}
+
+		if (!club_id) {
+			return res.status(400).json({ success: false, error: 'Club ID is required' });
+		}
+
+		try {
+			const { basePath, thumbnailPath } = getGalleryImagesPath(club_id, galleryId);
+			ensureDirectoriesExist(basePath, thumbnailPath);
+
+			// Generate unique filename
+			const timestamp = Date.now();
+			const ext = path.extname(req.file.originalname);
+			const imageFilename = `img_${timestamp}${ext}`;
+			const thumbnailFilename = `thumb_${timestamp}${ext}`;
+
+			const imagePath = path.join(basePath, imageFilename);
+			const thumbnailPathFull = path.join(thumbnailPath, thumbnailFilename);
+
+			// Save original image
+			await fs.promises.writeFile(imagePath, req.file.buffer);
+
+			// Generate and save thumbnail (300x300, maintaining aspect ratio)
+			await sharp(req.file.buffer)
+				.resize(300, 300, { fit: 'inside', withoutEnlargement: true })
+				.toFile(thumbnailPathFull);
+
+			// Get max order for this gallery
+			const maxOrderResult = await query(
+				`SELECT MAX(\`order\`) as max_order FROM gallery_images WHERE gallery_id = ? AND status != 2`,
+				[galleryId]
+			);
+			const maxOrder = maxOrderResult[0]?.max_order || 0;
+			const newOrder = maxOrder + 1;
+
+			// Insert into database
+			const result = await query(
+				`INSERT INTO gallery_images (gallery_id, image_filename, thumbnail_filename, \`order\`, date_created, status) 
+				VALUES (?, ?, ?, ?, NOW(), 1)`,
+				[galleryId, imageFilename, thumbnailFilename, newOrder]
+			);
+
+			console.log('[Gallery Images API] Created image with ID:', result.insertId);
+			res.json({
+				success: true,
+				data: {
+					id: result.insertId,
+					gallery_id: galleryId,
+					image_filename: imageFilename,
+					thumbnail_filename: thumbnailFilename,
+					order: newOrder
+				}
+			});
+		} catch (error) {
+			console.error('[Gallery Images API] Error:', error);
+			res.status(500).json({ success: false, error: error.message });
+		}
+	});
+
+	// DELETE /api/gallery/:galleryId/images/:imageId - Delete image
+	app.delete('/api/gallery/:galleryId/images/:imageId', async (req, res) => {
+		const { galleryId, imageId } = req.params;
+		const { club_id } = req.body;
+		console.log('[Gallery Images API] DELETE request for image ID:', imageId, 'Gallery ID:', galleryId);
+
+		if (!club_id) {
+			return res.status(400).json({ success: false, error: 'Club ID is required' });
+		}
+
+		try {
+			// Get image info
+			const rows = await query(
+				`SELECT * FROM gallery_images WHERE id = ? AND gallery_id = ? AND status != 2`,
+				[imageId, galleryId]
+			);
+
+			if (rows.length === 0) {
+				return res.status(404).json({ success: false, error: 'Image not found' });
+			}
+
+			const image = rows[0];
+			const { basePath, thumbnailPath } = getGalleryImagesPath(club_id, galleryId);
+
+			// Delete files
+			const imagePath = path.join(basePath, image.image_filename);
+			const thumbnailPathFull = path.join(thumbnailPath, image.thumbnail_filename);
+
+			try {
+				if (fs.existsSync(imagePath)) {
+					await fs.promises.unlink(imagePath);
+				}
+				if (fs.existsSync(thumbnailPathFull)) {
+					await fs.promises.unlink(thumbnailPathFull);
+				}
+			} catch (fileError) {
+				console.warn('[Gallery Images API] Error deleting files:', fileError);
+				// Continue with database deletion even if file deletion fails
+			}
+
+			// Soft delete in database
+			await query(
+				`UPDATE gallery_images SET status = 2 WHERE id = ?`,
+				[imageId]
+			);
+
+			console.log('[Gallery Images API] Deleted image ID:', imageId);
+			res.json({ success: true });
+		} catch (error) {
+			console.error('[Gallery Images API] Error:', error);
 			res.status(500).json({ success: false, error: error.message });
 		}
 	});

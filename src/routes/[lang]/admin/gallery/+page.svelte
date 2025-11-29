@@ -1,5 +1,6 @@
 <script>
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 	import AdminHeader from '../../../../lib/components/admin/AdminHeader.svelte';
 	import AdminFooter from '../../../../lib/components/admin/AdminFooter.svelte';
 	import { onMount } from 'svelte';
@@ -324,6 +325,13 @@
 							<div class="flex gap-2">
 								<button
 									type="button"
+									onclick={() => goto(`/${lang}/admin/gallery/${gallery.id}/images`)}
+									class="flex-1 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition-colors"
+								>
+									{lang === 'fr' ? 'Images' : 'Images'}
+								</button>
+								<button
+									type="button"
 									onclick={() => openEditModal(gallery)}
 									class="flex-1 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
 								>
@@ -403,6 +411,13 @@
 									</td>
 									<td class="px-6 py-4 whitespace-nowrap">
 										<div class="flex gap-2">
+											<button
+												type="button"
+												onclick={() => goto(`/${lang}/admin/gallery/${gallery.id}/images`)}
+												class="text-green-600 hover:text-green-800"
+											>
+												{lang === 'fr' ? 'Images' : 'Images'}
+											</button>
 											<button
 												type="button"
 												onclick={() => openEditModal(gallery)}
