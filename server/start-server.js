@@ -561,6 +561,24 @@ app.put('/api/gallery/:id', async (req, res) => {
 		}
 	});
 
+	// PUT /api/gallery/:galleryId/images/:imageId/order - Update image order
+	app.put('/api/gallery/:galleryId/images/:imageId/order', async (req, res) => {
+		const { galleryId, imageId } = req.params;
+		const { order } = req.body;
+		console.log('[Gallery Images API] Update order for image ID:', imageId, 'Gallery ID:', galleryId, 'New order:', order);
+		try {
+			await query(
+				`UPDATE gallery_images SET \`order\` = ? WHERE id = ? AND gallery_id = ? AND status != 2`,
+				[order, imageId, galleryId]
+			);
+			console.log('[Gallery Images API] Updated order for image ID:', imageId);
+			res.json({ success: true });
+		} catch (error) {
+			console.error('[Gallery Images API] Error:', error);
+			res.status(500).json({ success: false, error: error.message });
+		}
+	});
+
 // Graceful shutdown
 process.on('SIGINT', async () => {
 	console.log('\nShutting down gracefully...');

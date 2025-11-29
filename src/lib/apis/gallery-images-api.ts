@@ -86,3 +86,27 @@ export async function deleteGalleryImage(
 	}
 }
 
+/**
+ * Update gallery image order
+ */
+export async function updateGalleryImageOrder(
+	galleryId: number,
+	imageId: number,
+	newOrder: number
+): Promise<ApiResponse<any>> {
+	try {
+		const API_BASE_URL = getApiBaseUrl();
+		const response = await fetch(`${API_BASE_URL}/api/gallery/${galleryId}/images/${imageId}/order`, {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ order: newOrder })
+		});
+
+		if (!response.ok) throw new Error(`HTTP ${response.status}`);
+		return await response.json();
+	} catch (err: any) {
+		console.error('Error updating gallery image order:', err);
+		return { success: false, error: err.message || 'Failed to update image order' };
+	}
+}
+

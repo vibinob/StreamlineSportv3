@@ -31,7 +31,7 @@
 	let showDeleteModal = $state(false);
 	/** @type {any | null} */
 	let selectedGallery = $state(null);
-	let viewMode = $state('list'); // 'grid' (Card) or 'list' (Grid)
+	let viewMode = $state('list'); // 'grid' (Card) or 'list' (List)
 
 	// Form state
 	let formData = $state({
@@ -246,7 +246,7 @@
 							onclick={() => (viewMode = 'list')}
 							class="px-4 py-2 {viewMode === 'list' ? 'bg-[#1a3a5f] text-white' : 'bg-white text-gray-700'} transition-colors"
 						>
-							Grid
+							List
 						</button>
 					</div>
 					<!-- Add Button -->
@@ -349,7 +349,7 @@
 					{/each}
 				</div>
 			{:else}
-				<!-- Grid View -->
+				<!-- List View -->
 				<div class="bg-white rounded-lg shadow-md overflow-hidden">
 					<table class="w-full">
 						<thead class="bg-gray-100">
