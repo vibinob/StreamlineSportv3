@@ -1,12 +1,20 @@
 <script>
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 	import * as m from '$lib/paraglide/messages';
 	import { languageTagStore } from '$lib/paraglide/runtime';
 	import { get } from 'svelte/store';
 	import LanguageSwitcher from './LanguageSwitcher.svelte';
+	import { CURRENT_CLUB_ID } from '$lib/clubs/currentClub.js';
 
 	let mobileMenuOpen = $state(false);
 	let languageDropdownOpen = $state(false);
+
+	// Menu state loaded from backend API
+	/** @type {{ id:number; parentId:number|null; title:string; url:string; pageTypeId:number; sortOrder:number; children:any[] }[]} */
+	let menuItems = $state([]);
+	let menuLoading = $state(false);
+	let menuError = $state(null);
 
 	const lang = $derived.by(() => {
 		const paramLang = $page.params.lang;
@@ -18,6 +26,29 @@
 
 	// Current path, used to highlight the active menu item.
 	const currentPath = $derived.by(() => $page.url.pathname);
+
+	// Base URL for backend API (sanitize to avoid extra quotes/semicolons from .env)
+	const API_BASE_URL = (() => {
+		const raw = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+		return raw.trim().replace(/^['"]+|['";]+$/g, '').replace(/\/+$/, '');
+	})();
+
+	/**
+	 * Build href for a menu entry, prefixing with language when needed
+	 * @param {string} itemUrl
+	 */
+	function buildHref(itemUrl) {
+		if (!itemUrl) return `/${lang}`;
+		if (itemUrl.startsWith('http://') || itemUrl.startsWith('https://')) {
+			return itemUrl;
+		}
+		// URLs starting with '/' are treated as app-relative, we prefix with lang
+		if (itemUrl.startsWith('/')) {
+			return `/${lang}${itemUrl}`;
+		}
+		// Fallback: treat as path segment
+		return `/${lang}/${itemUrl}`;
+	}
 
 	// Subscribe to language tag store to make messages reactive
 	// This ensures components re-render when language changes
@@ -48,6 +79,46 @@
 	// Force reactivity - reference _langTracker in template to ensure tracking
 	// This ensures message functions are called again when language changes
 
+	// Load menu from backend whenever club or language changes
+	$effect(() => {
+		menuLoading = true;
+		menuError = null;
+
+		const controller = new AbortController();
+
+		// Backend already knows the club from its own env, so only send lang.
+		const url = `${API_BASE_URL}/api/menu?lang=${encodeURIComponent(lang)}`;
+
+		fetch(url, { signal: controller.signal })
+			.then((res) => {
+				if (!res.ok) {
+					throw new Error(`HTTP ${res.status} while fetching menu`);
+				}
+				return res.json();
+			})
+			.then((data) => {
+				if (!data || !data.success) {
+					menuError = data?.error || 'Failed to load menu';
+					menuItems = [];
+					return;
+				}
+				menuItems = Array.isArray(data.data) ? data.data : [];
+			})
+			.catch((err) => {
+				if (err.name !== 'AbortError') {
+					console.error('Menu fetch error:', err);
+					menuError = err.message;
+				}
+				menuItems = [];
+			})
+			.finally(() => {
+				menuLoading = false;
+			});
+
+		// Cleanup if effect re-runs
+		return () => controller.abort();
+	});
+
 	function toggleMobileMenu() {
 		mobileMenuOpen = !mobileMenuOpen;
 	}
@@ -59,6 +130,10 @@
 
 	function toggleLanguageDropdown() {
 		languageDropdownOpen = !languageDropdownOpen;
+	}
+
+	function handleLoginClick() {
+		goto(`/${lang}/login`);
 	}
 </script>
 
@@ -126,9 +201,10 @@
 				</a>
 			</div>
 
-			<!-- User Icon (Blue) -->
+			<!-- User Icon (Blue) - Login Button -->
 			<button
 				type="button"
+				onclick={handleLoginClick}
 				class="bg-transparent border-0 p-0 cursor-pointer text-blue-600 hover:text-blue-700 transition-colors"
 				aria-label={t(m.topBar_member)}
 			>
@@ -190,89 +266,26 @@
 					class:md:bg-transparent={true}
 					class:md:shadow-none={true}
 				>
-					<li class="relative">
-						<a
-							href="/{lang}"
-							onclick={handleNavClick}
-							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
-							class:border-[#F45E12]={currentPath === `/${lang}` || currentPath === `/${lang}/`}
-						>
-							{t(m.nav_home)}
-						</a>
-					</li>
-					<li class="relative">
-						<a
-							href="/{lang}/our-program"
-							onclick={handleNavClick}
-							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
-							class:border-[#F45E12]={currentPath.startsWith(`/${lang}/our-program`)}
-						>
-							{t(m.nav_ourProgram)}
-						</a>
-					</li>
-					<li class="relative">
-						<a
-							href="/{lang}/our-meets"
-							onclick={handleNavClick}
-							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
-						>
-							{t(m.nav_ourMeets)}
-						</a>
-					</li>
-					<li class="relative">
-						<a
-							href="/{lang}/tryouts"
-							onclick={handleNavClick}
-							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
-						>
-							{t(m.nav_tryouts)}
-						</a>
-					</li>
-					<li class="relative">
-						<a
-							href="/{lang}/club-records"
-							onclick={handleNavClick}
-							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
-						>
-							{t(m.nav_clubRecords)}
-						</a>
-					</li>
-					<li class="relative">
-						<a
-							href="/{lang}/coaches"
-							onclick={handleNavClick}
-							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
-						>
-							{t(m.nav_coaches)}
-						</a>
-					</li>
-					<li class="relative">
-						<a
-							href="/{lang}/news"
-							onclick={handleNavClick}
-							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
-						>
-							{t(m.nav_news)}
-						</a>
-					</li>
-					<li class="relative">
-						<a
-							href="/{lang}/gallery"
-							onclick={handleNavClick}
-							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
-						>
-							{t(m.nav_gallery)}
-						</a>
-					</li>
-					<li class="relative">
-						<a
-							href="/{lang}/contact"
-							onclick={handleNavClick}
-							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
-						>
-							{t(m.nav_contact)}
-						</a>
-					</li>
+					{#if menuLoading}
+						<li class="px-4 py-3 text-white text-sm">Loading...</li>
+					{:else if menuError}
+						<li class="px-4 py-3 text-red-400 text-sm">Menu error</li>
+					{:else}
+						{#each menuItems as item}
+							{#if item}
+								<li class="relative">
+									<a
+										href={buildHref(item.url)}
+										onclick={handleNavClick}
+										class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
+										class:border-[#F45E12]={currentPath === buildHref(item.url) || currentPath.startsWith(buildHref(item.url) + '/')}
+									>
+										{item.title}
+									</a>
+								</li>
+							{/if}
+						{/each}
+					{/if}
 				</ul>
 			</nav>
 		</div>
