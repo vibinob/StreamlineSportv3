@@ -245,6 +245,36 @@ app.get('/api/gallery', async (req, res) => {
 	}
 });
 
+// GET /api/public/gallery - Get public galleries (excludes member_only=1)
+app.get('/api/public/gallery', async (req, res) => {
+	console.log('[Public Gallery API] GET request received');
+	try {
+		const rows = await query(
+			`SELECT 
+				id,
+				gallery_name_en,
+				gallery_name_fr,
+				description_en,
+				description_fr,
+				\`order\`,
+				member_only,
+				date_created,
+				added_by,
+				date_updated,
+				updated_by,
+				status
+			FROM gallery 
+			WHERE status != 2 AND member_only = 0
+			ORDER BY \`order\` ASC, id ASC`
+		);
+		console.log('[Public Gallery API] Query returned', rows.length, 'public galleries');
+		res.json({ success: true, data: rows });
+	} catch (error) {
+		console.error('[Public Gallery API] Error:', error);
+		res.status(500).json({ success: false, error: error.message });
+	}
+});
+
 // GET /api/gallery/:id - Get single gallery
 app.get('/api/gallery/:id', async (req, res) => {
 	const { id } = req.params;
@@ -611,7 +641,8 @@ try {
 		console.log(`\n  API endpoints:`);
 		console.log(`  - Health: http://localhost:${PORT}/api/health`);
 		console.log(`  - DB Test: http://localhost:${PORT}/api/test-db`);
-		console.log(`  - Menu: http://localhost:${PORT}/api/menu?lang=fr\n`);
+		console.log(`  - Menu: http://localhost:${PORT}/api/menu?lang=fr`);
+		console.log(`  - Public Gallery: http://localhost:${PORT}/api/public/gallery\n`);
 	});
 } catch (error) {
 	console.error('Failed to start server:', error);

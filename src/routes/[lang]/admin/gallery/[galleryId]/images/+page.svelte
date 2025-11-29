@@ -615,7 +615,12 @@
 			<!-- Image Container (prevents backdrop click from closing) -->
 			<div
 				onclick={(e) => e.stopPropagation()}
-				onkeydown={(e) => e.stopPropagation()}
+				onkeydown={(e) => {
+					// Allow Escape key to bubble up to close modal
+					if (e.key !== 'Escape') {
+						e.stopPropagation();
+					}
+				}}
 				role="presentation"
 			>
 				<img

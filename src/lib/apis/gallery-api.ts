@@ -75,6 +75,26 @@ export async function getGalleries(): Promise<GalleryResponse> {
 }
 
 /**
+ * Get public galleries (excludes member_only=1)
+ */
+export async function getPublicGalleries(): Promise<GalleryResponse> {
+	const API_BASE_URL = getApiBaseUrl();
+	const url = `${API_BASE_URL}/api/public/gallery`;
+
+	try {
+		const response = await fetch(url);
+		if (!response.ok) {
+			throw new Error(`HTTP ${response.status}`);
+		}
+		const data = await response.json();
+		return data;
+	} catch (error) {
+		console.error('Error loading public galleries:', error);
+		throw error;
+	}
+}
+
+/**
  * Get single gallery by ID
  */
 export async function getGalleryById(id: number): Promise<SingleGalleryResponse> {
