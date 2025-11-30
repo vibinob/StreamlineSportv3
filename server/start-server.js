@@ -196,6 +196,16 @@ app.get('/api/menu', async (req, res) => {
 			}
 		}
 
+		// Sort children arrays by sortOrder
+		for (const node of Object.values(byId)) {
+			if (node.children.length > 0) {
+				node.children.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+			}
+		}
+
+		// Sort roots array by sortOrder
+		roots.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+
 		console.log('[Menu API] Built tree with', roots.length, 'root items');
 
 		const result = {

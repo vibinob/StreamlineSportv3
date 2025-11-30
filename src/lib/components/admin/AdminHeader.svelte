@@ -57,14 +57,19 @@
 	<div class="bg-blue-100 py-3 shadow-sm">
 		<div class="container mx-auto px-4 max-w-7xl">
 			<div class="flex justify-between items-center">
-				<button
-					type="button"
-					onclick={handleHomeClick}
-					class="text-2xl font-bold hover:opacity-80 transition-opacity bg-transparent border-0 cursor-pointer flex items-center gap-1"
-				>
-					<span class="text-black">STREAMLINE</span>
-					<span class="text-[#F45E12]">SPORT</span>
-				</button>
+				<div class="flex items-center gap-3">
+					<button
+						type="button"
+						onclick={handleHomeClick}
+						class="text-2xl font-bold hover:opacity-80 transition-opacity bg-transparent border-0 cursor-pointer"
+					>
+						<span class="text-black">STREAMLINESPORT</span>
+					</button>
+					<!-- Beta Badge -->
+					<span class="px-2 py-1 text-xs font-bold text-white bg-orange-500 rounded uppercase">
+						Beta
+					</span>
+				</div>
 				<!-- Language Switcher -->
 				<div class="relative">
 					<LanguageSwitcher />

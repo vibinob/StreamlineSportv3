@@ -47,6 +47,44 @@
 		return `/${lang}/${itemUrl}`;
 	}
 
+	/**
+	 * Check if a menu item is the home/landing page
+	 * @param {string} itemUrl
+	 */
+	function isHomeItem(itemUrl) {
+		if (!itemUrl || itemUrl === '' || itemUrl === '/') return true;
+		const normalized = itemUrl.toLowerCase().replace(/^\/+|\/+$/g, '');
+		return normalized === '' || normalized === 'default' || normalized === 'accueil';
+	}
+
+	/**
+	 * Check if current path matches a menu item (including home special cases)
+	 * @param {string} itemUrl
+	 * @param {string} currentPath
+	 */
+	function isActiveMenuItem(itemUrl, currentPath) {
+		const href = buildHref(itemUrl);
+		const isHome = isHomeItem(itemUrl);
+		
+		// Check exact match or path prefix
+		if (currentPath === href || currentPath.startsWith(href + '/')) {
+			return true;
+		}
+		
+		// Special case: home item should also match /en/default and /fr/accueil
+		if (isHome) {
+			if (currentPath === `/${lang}/default` || currentPath === `/${lang}/accueil`) {
+				return true;
+			}
+			// Also match the root language path
+			if (currentPath === `/${lang}` || currentPath === `/${lang}/`) {
+				return true;
+			}
+		}
+		
+		return false;
+	}
+
 	// Subscribe to language tag store to make messages reactive
 	// This ensures components re-render when language changes
 	const languageStore = languageTagStore();
@@ -259,7 +297,7 @@
 										href={buildHref(item.url)}
 										onclick={handleNavClick}
 										class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
-										class:border-[#F45E12]={currentPath === buildHref(item.url) || currentPath.startsWith(buildHref(item.url) + '/')}
+										class:border-[#F45E12]={isActiveMenuItem(item.url, currentPath)}
 									>
 										{item.title}
 									</a>
