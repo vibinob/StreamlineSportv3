@@ -109,6 +109,34 @@ export async function getNews(): Promise<ApiResponse<News[]>> {
 }
 
 /**
+ * Get public news items (where post_to_public = 1)
+ */
+export async function getPublicNews(lang: 'en' | 'fr' = 'en'): Promise<ApiResponse<any[]>> {
+	try {
+		const response = await fetch(`${API_BASE_URL}/api/news/public?lang=${lang}`);
+		if (!response.ok) throw new Error(`HTTP ${response.status}`);
+		return await response.json();
+	} catch (err: any) {
+		console.error('Error fetching public news:', err);
+		return { success: false, error: err.message || 'Failed to fetch public news' };
+	}
+}
+
+/**
+ * Get news by slug
+ */
+export async function getNewsBySlug(slug: string, lang: 'en' | 'fr' = 'en'): Promise<ApiResponse<any>> {
+	try {
+		const response = await fetch(`${API_BASE_URL}/api/news/slug/${slug}?lang=${lang}`);
+		if (!response.ok) throw new Error(`HTTP ${response.status}`);
+		return await response.json();
+	} catch (err: any) {
+		console.error(`Error fetching news by slug ${slug}:`, err);
+		return { success: false, error: err.message || `Failed to fetch news ${slug}` };
+	}
+}
+
+/**
  * Get single news item by ID
  */
 export async function getNewsById(id: number): Promise<ApiResponse<News>> {
