@@ -6,6 +6,7 @@
 	import { onMount } from 'svelte';
 	import { getNewsById, updateNews as updateNewsApi } from '$lib/apis/news-api';
 	import { CURRENT_CLUB_ID } from '$lib/clubs/currentClub.js';
+	import RichTextEditor from '$lib/components/admin/RichTextEditor.svelte';
 
 	const lang = $derived.by(() => {
 		try {
@@ -384,17 +385,17 @@
 						<label for="content-article" class="block text-sm font-bold mb-2">
 							{selectedLanguage === 'en' ? 'Article' : 'Article'}:
 						</label>
-						<textarea
-							id="content-article"
-							bind:value={article}
-							rows="25"
-							class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#1a3a5f] font-mono text-sm"
-							placeholder={selectedLanguage === 'en' ? 'Enter the full article content. You can use HTML formatting.' : 'Entrez le contenu complet de l\'article. Vous pouvez utiliser le formatage HTML.'}
-						></textarea>
+						<div class="border-2 border-gray-300 rounded-lg overflow-hidden">
+							<RichTextEditor
+								bind:value={article}
+								placeholder={selectedLanguage === 'en' ? 'Enter the full article content...' : 'Entrez le contenu complet de l\'article...'}
+								height={500}
+							/>
+						</div>
 						<p class="text-xs text-gray-500 mt-2">
 							{selectedLanguage === 'en'
-								? 'You can use HTML to format the content. A rich text editor can be added here later.'
-								: 'Vous pouvez utiliser du HTML pour formater le contenu. Un éditeur de texte riche peut être ajouté ici plus tard.'}
+								? 'Use the toolbar to format your content. You can insert images, links, tables, and more.'
+								: 'Utilisez la barre d\'outils pour formater votre contenu. Vous pouvez insérer des images, des liens, des tableaux et plus encore.'}
 						</p>
 					</div>
 

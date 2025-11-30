@@ -896,6 +896,92 @@ app.put('/api/gallery/:id', async (req, res) => {
 		}
 	}
 
+	// POST /api/news/upload-image - Upload image for rich text editor
+	app.post('/api/news/upload-image', upload.single('image'), async (req, res) => {
+		const { club_id } = req.body;
+		console.log('[News Image Upload API] POST request, Club ID:', club_id);
+
+		if (!req.file) {
+			return res.status(400).json({ success: false, error: 'No image file provided' });
+		}
+
+		if (!club_id) {
+			return res.status(400).json({ success: false, error: 'Club ID is required' });
+		}
+
+		try {
+			const { basePath } = getNewsImagesPath(club_id);
+			ensureNewsDirectoriesExist(basePath, path.join(basePath, 'thumbnail'));
+
+			// Generate unique filename
+			const timestamp = Date.now();
+			const ext = path.extname(req.file.originalname);
+			const imageFilename = `article_${timestamp}${ext}`;
+
+			const imagePath = path.join(basePath, imageFilename);
+
+			// Save image
+			await fs.promises.writeFile(imagePath, req.file.buffer);
+
+			// Return URL for the image
+			const imageUrl = `/images/clubs/${club_id}/news/${imageFilename}`;
+
+			console.log('[News Image Upload API] Image uploaded:', imageFilename);
+			res.json({ success: true, url: imageUrl, filename: imageFilename });
+		} catch (error) {
+			console.error('[News Image Upload API] Error:', error);
+			res.status(500).json({ success: false, error: error.message });
+		}
+	});
+
+	// POST /api/news/upload-file - Upload file for rich text editor
+	app.post('/api/news/upload-file', upload.single('file'), async (req, res) => {
+		const { club_id } = req.body;
+		console.log('[News File Upload API] POST request, Club ID:', club_id);
+
+		if (!req.file) {
+			return res.status(400).json({ success: false, error: 'No file provided' });
+		}
+
+		if (!club_id) {
+			return res.status(400).json({ success: false, error: 'Club ID is required' });
+		}
+
+		try {
+			// Create files directory inside news folder
+			const filesPath = path.join(__dirname, '..', 'static', 'images', 'clubs', club_id, 'news', 'files');
+			if (!fs.existsSync(filesPath)) {
+				fs.mkdirSync(filesPath, { recursive: true });
+			}
+
+			// Get original filename without extension
+			const originalName = path.parse(req.file.originalname).name;
+			const ext = path.extname(req.file.originalname);
+			let fileFilename = `${originalName}${ext}`;
+			let filePath = path.join(filesPath, fileFilename);
+			let version = 1;
+
+			// Check if file exists and add version number
+			while (fs.existsSync(filePath)) {
+				version++;
+				fileFilename = `${originalName}_v${version}${ext}`;
+				filePath = path.join(filesPath, fileFilename);
+			}
+
+			// Save file
+			await fs.promises.writeFile(filePath, req.file.buffer);
+
+			// Return URL for the file
+			const fileUrl = `/images/clubs/${club_id}/news/files/${fileFilename}`;
+
+			console.log('[News File Upload API] File uploaded:', fileFilename, version > 1 ? `(version ${version})` : '');
+			res.json({ success: true, url: fileUrl, filename: fileFilename });
+		} catch (error) {
+			console.error('[News File Upload API] Error:', error);
+			res.status(500).json({ success: false, error: error.message });
+		}
+	});
+
 	// GET /api/news - Get all news
 	app.get('/api/news', async (req, res) => {
 		console.log('[News API] GET request received');
