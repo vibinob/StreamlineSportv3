@@ -2,7 +2,7 @@
 
 This application requires **two servers** to be running:
 
-## 1. Backend API Server (Port 3001)
+## 1. Backend API Server (Port 3111)
 
 The backend server handles database connections and API endpoints.
 
@@ -13,19 +13,19 @@ npm run server
 
 **Or in a separate terminal:**
 ```bash
-node server/index.js
+node server/start-server.js
 ```
 
 You should see:
 ```
-Server running on http://localhost:3001
+Server running on http://localhost:3111
 Environment: development
 Database: localhost:3306/streamline_sport
 ```
 
 **Test it:**
-- Health check: http://localhost:3001/api/health
-- Database test: http://localhost:3001/api/test-db
+- Health check: http://localhost:3111/api/health
+- Database test: http://localhost:3111/api/test-db
 
 ## 2. Frontend Development Server (Port 5555)
 
@@ -67,19 +67,19 @@ If you see `ERR_CONNECTION_REFUSED`:
 
 1. **Check if servers are running:**
    ```bash
-   # Check backend (port 3001)
-   netstat -an | findstr 3001
+   # Check backend (port 3111)
+   netstat -an | findstr 3111
    
    # Check frontend (port 5555)
    netstat -an | findstr 5555
    ```
 
 2. **Make sure both servers are started:**
-   - Backend must be running on port 3001
+   - Backend must be running on port 3111
    - Frontend must be running on port 5555
 
 3. **Check for port conflicts:**
-   - If port 3001 is in use, change `SERVER_PORT` in `.env`
+   - If port 3111 is in use, change `SERVER_PORT` in `.env`
    - If port 5555 is in use, change `port` in `vite.config.js`
 
 4. **Verify .env file exists:**

@@ -19,13 +19,14 @@ console.log(`  DB_HOST: ${process.env.DB_HOST || 'not set'}`);
 console.log(`  DB_PORT: ${process.env.DB_PORT || 'not set'}`);
 console.log(`  DB_USER: ${process.env.DB_USER || 'not set'}`);
 console.log(`  DB_NAME: ${process.env.DB_NAME || 'not set'}`);
-console.log(`  SERVER_PORT: ${process.env.SERVER_PORT || '3001'}\n`);
+console.log(`  SERVER_PORT: ${process.env.SERVER_PORT || '3111'}\n`);
 
 // Import after dotenv.config() to ensure env vars are loaded
 import { createConnection, getPool, closePool, query } from './db.js';
 
 const app = express();
-const PORT = process.env.SERVER_PORT || 3001;
+const PORT = process.env.SERVER_PORT || 3111;
+const HOST = process.env.SERVER_HOST || '0.0.0.0'; // 0.0.0.0 allows external connections
 
 // Middleware
 app.use(cors());
@@ -900,16 +901,18 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // Start server
 try {
-	app.listen(PORT, () => {
-		console.log(`\n✓ Server running on http://localhost:${PORT}`);
+	app.listen(PORT, HOST, () => {
+		const serverUrl = HOST === '0.0.0.0' ? `http://localhost:${PORT}` : `http://${HOST}:${PORT}`;
+		console.log(`\n✓ Server running on http://${HOST}:${PORT}`);
+		console.log(`  Accessible at: ${serverUrl}`);
 		console.log(`  Environment: ${process.env.NODE_ENV || 'development'}`);
 		console.log(`  Database: ${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || '3306'}/${process.env.DB_NAME || 'streamline_sport'}`);
 		console.log(`\n  API endpoints:`);
-		console.log(`  - Health: http://localhost:${PORT}/api/health`);
-		console.log(`  - DB Test: http://localhost:${PORT}/api/test-db`);
-		console.log(`  - Menu: http://localhost:${PORT}/api/menu?lang=fr`);
-		console.log(`  - Public Gallery: http://localhost:${PORT}/api/public/gallery`);
-		console.log(`  - Slider: http://localhost:${PORT}/api/slider\n`);
+		console.log(`  - Health: ${serverUrl}/api/health`);
+		console.log(`  - DB Test: ${serverUrl}/api/test-db`);
+		console.log(`  - Menu: ${serverUrl}/api/menu?lang=fr`);
+		console.log(`  - Public Gallery: ${serverUrl}/api/public/gallery`);
+		console.log(`  - Slider: ${serverUrl}/api/slider\n`);
 	});
 } catch (error) {
 	console.error('Failed to start server:', error);

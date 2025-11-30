@@ -1,6 +1,8 @@
 <script>
 	import { page } from '$app/stores';
-	import { t } from '$lib/i18n/index.js';
+	import * as m from '$lib/paraglide/messages';
+	import { languageTagStore } from '$lib/paraglide/runtime';
+	import { get } from 'svelte/store';
 
 	const lang = $derived.by(() => {
 		const paramLang = $page.params.lang;
@@ -9,10 +11,35 @@
 		}
 		return 'fr';
 	});
+
+	// Subscribe to language tag store to make messages reactive
+	const languageStore = languageTagStore();
+	let _langTracker = $state(get(languageStore));
+	const initialLang = get(languageStore);
+	// Initialize the global language tag
+	m.setCurrentLanguageTag(initialLang);
+	
+	$effect(() => {
+		const unsubscribe = languageStore.subscribe(value => {
+			_langTracker = value;
+			// Update the global language tag in messages module
+			m.setCurrentLanguageTag(value);
+		});
+		return unsubscribe;
+	});
+	
+	// Helper function to get translations with current language
+	/**
+	 * @param {(lang: import('$lib/paraglide/runtime').LanguageTag) => string} fn
+	 * @returns {string}
+	 */
+	const t = (fn) => fn(_langTracker);
 </script>
 
 <!-- Mission Section -->
 <section class="py-16 bg-gradient-to-b from-gray-50 to-white">
+	<!-- Hidden element to track language changes -->
+	<span style="display: none;">{_langTracker}</span>
 	<div class="container mx-auto px-4 max-w-7xl">
 		<div class="max-w-5xl mx-auto">
 			<!-- Welcome Section -->
@@ -20,7 +47,7 @@
 				<div class="flex items-center justify-center gap-4 mb-6">
 					<div class="h-0.5 bg-[#8B4513] flex-1 max-w-[200px]"></div>
 					<h1 class="text-3xl md:text-5xl font-bold text-black whitespace-nowrap">
-						{t(lang, 'mission.welcome')}
+						{t(m.mission_welcome)}
 					</h1>
 					<div class="h-0.5 bg-[#8B4513] flex-1 max-w-[200px]"></div>
 				</div>
@@ -41,7 +68,7 @@
 				<div class="order-1 md:order-2 flex items-center">
 					<div class="bg-white rounded-xl p-6 shadow-lg border-l-4 border-[#F45E12]">
 						<p class="text-base md:text-lg text-gray-700 leading-relaxed">
-							{t(lang, 'mission.description')}
+							{t(m.mission_description)}
 						</p>
 					</div>
 				</div>
@@ -57,7 +84,7 @@
 					<div class="text-center mb-8">
 						<div class="inline-block bg-[#F45E12] px-6 py-2 rounded-full">
 							<h2 class="text-2xl md:text-3xl font-bold text-white">
-								{t(lang, 'mission.missionTitle')}
+								{t(m.mission_missionTitle)}
 							</h2>
 						</div>
 					</div>
@@ -65,22 +92,22 @@
 						<div class="bg-white/60 backdrop-blur-sm rounded-lg p-4 shadow-md">
 							<div class="space-y-4">
 								<p class="text-base md:text-lg text-gray-800">
-									{t(lang, 'mission.mission1')}
+									{t(m.mission_mission1)}
 								</p>
 								<p class="text-base md:text-lg text-gray-800">
-									{t(lang, 'mission.mission2')}
+									{t(m.mission_mission2)}
 								</p>
 								<p class="text-base md:text-lg text-gray-800">
-									{t(lang, 'mission.mission3')}
+									{t(m.mission_mission3)}
 								</p>
 								<p class="text-base md:text-lg text-gray-800">
-									{t(lang, 'mission.mission4')}
+									{t(m.mission_mission4)}
 								</p>
 								<p class="text-base md:text-lg text-gray-800">
-									{t(lang, 'mission.mission5')}
+									{t(m.mission_mission5)}
 								</p>
 								<p class="text-base md:text-lg text-gray-800">
-									{t(lang, 'mission.mission6')}
+									{t(m.mission_mission6)}
 								</p>
 							</div>
 						</div>
@@ -98,14 +125,14 @@
 					<div class="text-center mb-8">
 						<div class="inline-block bg-[#F45E12] px-6 py-2 rounded-full">
 							<h2 class="text-2xl md:text-3xl font-bold text-white">
-								{t(lang, 'mission.coachesTitle')}
+								{t(m.mission_coachesTitle)}
 							</h2>
 						</div>
 					</div>
 					<div class="text-center max-w-4xl mx-auto">
 						<div class="bg-white/60 backdrop-blur-sm rounded-lg p-4 shadow-md">
 							<p class="text-base md:text-lg text-gray-800">
-								{t(lang, 'mission.coaches1')} {t(lang, 'mission.coaches2')} {t(lang, 'mission.coaches3')}
+								{t(m.mission_coaches1)} {t(m.mission_coaches2)} {t(m.mission_coaches3)}
 							</p>
 						</div>
 					</div>

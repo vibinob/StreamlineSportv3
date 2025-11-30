@@ -8,10 +8,11 @@ export default defineConfig({
 		sveltekit()
 	],
 	server: {
-		port: 5555,
+		port: parseInt(process.env.FRONTEND_PORT || '5555'),
+		host: process.env.FRONTEND_HOST || '0.0.0.0', // 0.0.0.0 allows external connections
 		proxy: {
 			'/api': {
-				target: 'http://localhost:3111',
+				target: process.env.VITE_API_BASE_URL || 'http://localhost:3111',
 				changeOrigin: true
 			}
 		}

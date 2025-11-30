@@ -69,7 +69,7 @@ console.log(`  Database Host: ${process.env.DB_HOST || 'localhost'}`);
 console.log(`  Database Port: ${process.env.DB_PORT || '3306'}`);
 console.log(`  Database User: ${process.env.DB_USER || 'root'}`);
 console.log(`  Database Name: ${process.env.DB_NAME || 'streamline_sport'}`);
-console.log(`  Server Port: ${process.env.SERVER_PORT || '3001'}`);
+console.log(`  Server Port: ${process.env.SERVER_PORT || '3111'}`);
 console.log(`  Environment: ${process.env.NODE_ENV || 'development'}`);
 
 if (allValid) {

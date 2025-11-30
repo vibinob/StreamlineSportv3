@@ -36,7 +36,7 @@ DB_USER=your_username
 DB_PASSWORD=your_password
 DB_NAME=streamline_sport
 
-SERVER_PORT=3001
+SERVER_PORT=3111
 NODE_ENV=development
 ```
 
@@ -55,7 +55,7 @@ npm run dev
 ```
 
 The frontend will be available at `http://localhost:5173`
-The backend API will be available at `http://localhost:3001`
+The backend API will be available at `http://localhost:3111`
 
 ### Production Build
 
@@ -114,12 +114,12 @@ CREATE TABLE your_table (
 
 - The application is configured for MySQL 5.1 compatibility
 - Make sure your MySQL server is running before starting the application
-- The backend server runs on port 3001 by default
+- The backend server runs on port 3111 by default
 - The frontend development server runs on port 5173 by default
 
 ## Troubleshooting
 
 - **Database connection errors**: Verify your MySQL credentials in `.env` file
-- **Port conflicts**: Change `SERVER_PORT` in `.env` if port 3001 is in use
+- **Port conflicts**: Change `SERVER_PORT` in `.env` if port 3111 is in use
 - **Module errors**: Run `npm install` again to ensure all dependencies are installed
 

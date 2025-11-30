@@ -41,7 +41,7 @@ DB_PORT=3306
 DB_USER=root
 DB_PASSWORD=your_password
 DB_NAME=streamline_sport
-SERVER_PORT=3001
+SERVER_PORT=3111
 NODE_ENV=development
 ```
 
@@ -54,10 +54,10 @@ npm run server
 
 2. Test the database connection:
 ```bash
-curl http://localhost:3001/api/test-db
+curl http://localhost:3111/api/test-db
 ```
 
-Or open in your browser: `http://localhost:3001/api/test-db`
+Or open in your browser: `http://localhost:3111/api/test-db`
 
 You should see a response like:
 ```json
