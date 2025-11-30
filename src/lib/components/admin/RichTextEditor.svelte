@@ -29,8 +29,14 @@
 	let editor: Editor | null = $state(null);
 	let imageUploadInput: HTMLInputElement | null = $state(null);
 	let fileUploadInput: HTMLInputElement | null = $state(null);
+	let fileDialogUploadInput: HTMLInputElement | null = $state(null);
 	let uploadingImage = $state(false);
 	let uploadingFile = $state(false);
+	let showFileDialog = $state(false);
+	let uploadedFiles = $state<Array<{ filename: string; url: string; size?: number }>>([]);
+	let loadingFiles = $state(false);
+	let showCodeView = $state(false);
+	let codeViewTextarea: HTMLTextAreaElement | null = $state(null);
 
 	onMount(() => {
 		if (!browser || !editorContainer) return;
@@ -41,7 +47,10 @@
 				StarterKit.configure({
 					heading: {
 						levels: [1, 2, 3, 4, 5, 6]
-					}
+					},
+					// Disable link and underline from StarterKit since we're adding them separately with custom config
+					link: false,
+					underline: false
 				}),
 				Image.configure({
 					inline: true,
@@ -97,10 +106,33 @@
 		}
 	});
 
-	// Watch for external value changes
+	// Watch for external value changes (but not when in code view to avoid conflicts)
 	$effect(() => {
-		if (editor && value !== editor.getHTML()) {
-			editor.commands.setContent(value || '');
+		if (editor && !showCodeView) {
+			const editorHtml = editor.getHTML();
+			// Only update if value has actually changed and is different from editor content
+			if (value !== editorHtml && value !== undefined) {
+				// Use a small delay to ensure editor is ready
+				setTimeout(() => {
+					if (editor && !showCodeView) {
+						editor.commands.setContent(value || '');
+					}
+				}, 0);
+			}
+		}
+	});
+
+	// Focus textarea when code view becomes active
+	$effect(() => {
+		if (showCodeView && codeViewTextarea) {
+			// Use requestAnimationFrame to ensure the textarea is fully rendered
+			requestAnimationFrame(() => {
+				if (codeViewTextarea) {
+					codeViewTextarea.focus();
+					const length = codeViewTextarea.value.length;
+					codeViewTextarea.setSelectionRange(length, length);
+				}
+			});
 		}
 	});
 
@@ -139,6 +171,10 @@
 
 	function toggleBlockquote() {
 		editor?.chain().focus().toggleBlockquote().run();
+	}
+
+	function insertHorizontalRule() {
+		editor?.chain().focus().setHorizontalRule().run();
 	}
 
 	function setLink() {
@@ -239,6 +275,81 @@
 		fileUploadInput?.click();
 	}
 
+	async function loadUploadedFiles() {
+		loadingFiles = true;
+		try {
+			const response = await fetch(`/api/news/files?club_id=${CURRENT_CLUB_ID}`);
+			if (!response.ok) {
+				throw new Error('Failed to load files');
+			}
+			const result = await response.json();
+			if (result.success && result.files) {
+				uploadedFiles = result.files;
+			}
+		} catch (error) {
+			console.error('Error loading files:', error);
+			uploadedFiles = [];
+		} finally {
+			loadingFiles = false;
+		}
+	}
+
+	function openFileDialog() {
+		showFileDialog = true;
+		loadUploadedFiles();
+	}
+
+	function closeFileDialog() {
+		showFileDialog = false;
+	}
+
+	function insertFile(file: { filename: string; url: string }) {
+		if (editor) {
+			editor.chain().focus().insertContent(`<a href="${file.url}" target="_blank" rel="noopener noreferrer">${file.filename}</a>`).run();
+		}
+		closeFileDialog();
+	}
+
+	async function uploadFileFromDialog(event: Event) {
+		const target = event.target as HTMLInputElement;
+		const file = target.files?.[0];
+		if (!file) return;
+
+		uploadingFile = true;
+		try {
+			const formData = new FormData();
+			formData.append('file', file);
+			formData.append('club_id', CURRENT_CLUB_ID);
+
+			const response = await fetch('/api/news/upload-file', {
+				method: 'POST',
+				body: formData
+			});
+
+			if (!response.ok) {
+				throw new Error('Failed to upload file');
+			}
+
+			const result = await response.json();
+			if (result.success && result.url) {
+				// Reload file list
+				await loadUploadedFiles();
+				// Optionally insert the file immediately
+				insertFile({ filename: result.filename, url: result.url });
+			} else {
+				throw new Error(result.error || 'Upload failed');
+			}
+		} catch (error) {
+			console.error('Error uploading file:', error);
+			alert('Failed to upload file. Please try again.');
+		} finally {
+			uploadingFile = false;
+			if (fileDialogUploadInput) {
+				fileDialogUploadInput.value = '';
+			}
+		}
+	}
+
 	// Table functions
 	function insertTable() {
 		editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
@@ -306,6 +417,35 @@
 
 	function redo() {
 		editor?.chain().focus().redo().run();
+	}
+
+	function toggleCodeView() {
+		const wasInCodeView = showCodeView;
+		showCodeView = !showCodeView;
+		
+		if (wasInCodeView) {
+			// Switching from code view to editor view
+			// Update editor with current HTML value
+			// Use multiple animation frames to ensure DOM is fully updated and editor container is visible
+			requestAnimationFrame(() => {
+				requestAnimationFrame(() => {
+					if (editor && editorContainer) {
+						const newHtml = value || '';
+						// Always update the editor content when switching back from code view
+						editor.commands.setContent(newHtml);
+						// Force editor to focus to ensure it's active
+						editor.commands.focus();
+					}
+				});
+			});
+		} else {
+			// Switching from editor view to code view
+			// Update code view with current editor HTML
+			if (editor) {
+				value = editor.getHTML();
+			}
+			// Focus will be handled by the $effect when codeViewTextarea becomes available
+		}
 	}
 </script>
 
@@ -410,6 +550,14 @@
 			>
 				"
 			</button>
+			<button
+				type="button"
+				onclick={insertHorizontalRule}
+				class="px-2 py-1 rounded hover:bg-gray-200"
+				title="Insert Horizontal Rule"
+			>
+				―
+			</button>
 
 			<div class="w-px h-6 bg-gray-300 mx-1"></div>
 
@@ -484,12 +632,11 @@
 			/>
 			<button
 				type="button"
-				onclick={triggerFileUpload}
+				onclick={openFileDialog}
 				class="px-2 py-1 rounded hover:bg-gray-200"
-				title="Upload File (PDF, DOC, XLS, etc.)"
-				disabled={uploadingFile}
+				title="File Manager - Upload or Insert Files"
 			>
-				{uploadingFile ? '⏳' : '📎'}
+				📎
 			</button>
 			<input
 				type="file"
@@ -601,11 +748,134 @@
 			>
 				↷
 			</button>
+
+			<div class="w-px h-6 bg-gray-300 mx-1"></div>
+
+			<!-- Code View Toggle -->
+			<button
+				type="button"
+				onclick={toggleCodeView}
+				class="px-2 py-1 rounded hover:bg-gray-200 {showCodeView ? 'bg-gray-300' : ''}"
+				title={showCodeView ? 'Switch to Visual Editor' : 'Switch to Code View (HTML)'}
+			>
+				{#if showCodeView}
+					👁️
+				{:else}
+					&lt;/&gt;
+				{/if}
+			</button>
 		</div>
 
-		<!-- Editor -->
-		<div bind:this={editorContainer} class="min-h-[200px]"></div>
+		<!-- Editor or Code View -->
+		{#if showCodeView}
+			<textarea
+				bind:this={codeViewTextarea}
+				bind:value={value}
+				oninput={(e) => {
+					const target = e.target as HTMLTextAreaElement;
+					value = target.value;
+					onChange?.(target.value);
+				}}
+				class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg font-mono text-sm min-h-[200px] resize-y"
+				style="min-height: {height}px;"
+				placeholder="HTML code will appear here..."
+			></textarea>
+		{/if}
+		<!-- Always keep editor container in DOM, just hide it when in code view -->
+		<div 
+			bind:this={editorContainer} 
+			class="min-h-[200px]"
+			style="display: {showCodeView ? 'none' : 'block'};"
+		></div>
 	</div>
+
+	<!-- File Dialog -->
+	{#if showFileDialog}
+		<div 
+			class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" 
+			onclick={closeFileDialog}
+			onkeydown={(e) => e.key === 'Escape' && closeFileDialog()}
+			role="button"
+			tabindex="0"
+			aria-label="Close file dialog"
+		>
+			<div 
+				class="bg-white rounded-lg p-6 max-w-3xl w-full mx-4 max-h-[80vh] overflow-y-auto" 
+				onclick={(e) => e.stopPropagation()} 
+				onkeydown={(e) => e.stopPropagation()}
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="file-dialog-title"
+				tabindex="-1"
+			>
+				<div class="flex justify-between items-center mb-4">
+					<h3 id="file-dialog-title" class="text-xl font-bold">File Manager</h3>
+					<button
+						type="button"
+						onclick={closeFileDialog}
+						class="text-gray-500 hover:text-gray-700 text-2xl"
+					>
+						×
+					</button>
+				</div>
+
+				<!-- Upload New File Section -->
+				<div class="mb-6 p-4 border-2 border-dashed border-gray-300 rounded-lg">
+					<label for="file-dialog-upload" class="block text-sm font-bold mb-2">Upload New File:</label>
+					<div class="flex gap-2 items-center">
+						<input
+							id="file-dialog-upload"
+							type="file"
+							bind:this={fileDialogUploadInput}
+							accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z"
+							onchange={uploadFileFromDialog}
+							class="flex-1 px-4 py-2 border-2 border-gray-300 rounded-lg"
+							disabled={uploadingFile}
+						/>
+						{#if uploadingFile}
+							<span class="text-sm text-gray-500">Uploading...</span>
+						{/if}
+					</div>
+					<p class="text-xs text-gray-500 mt-2">
+						Supported: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, TXT, CSV, ZIP, RAR, 7Z
+					</p>
+				</div>
+
+				<!-- Files List -->
+				<div>
+					<h4 class="text-lg font-bold mb-3">Uploaded Files:</h4>
+					{#if loadingFiles}
+						<div class="text-center py-8 text-gray-500">Loading files...</div>
+					{:else if uploadedFiles.length === 0}
+						<div class="text-center py-8 text-gray-500">No files uploaded yet.</div>
+					{:else}
+						<div class="grid grid-cols-1 gap-2 max-h-96 overflow-y-auto">
+							{#each uploadedFiles as file}
+								<div class="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
+									<div class="flex items-center gap-3 flex-1 min-w-0">
+										<span class="text-2xl">📄</span>
+										<div class="flex-1 min-w-0">
+											<p class="text-sm font-medium truncate" title={file.filename}>{file.filename}</p>
+											{#if file.size}
+												<p class="text-xs text-gray-500">{(file.size / 1024).toFixed(2)} KB</p>
+											{/if}
+										</div>
+									</div>
+									<button
+										type="button"
+										onclick={() => insertFile(file)}
+										class="px-4 py-2 bg-[#1a3a5f] text-white rounded-lg hover:bg-[#1a3a5f]/90 text-sm"
+									>
+										Insert
+									</button>
+								</div>
+							{/each}
+						</div>
+					{/if}
+				</div>
+			</div>
+		</div>
+	{/if}
 {:else}
 	<textarea
 		class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg"

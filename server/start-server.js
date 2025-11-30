@@ -33,6 +33,10 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Serve static files
+app.use('/images', express.static(path.join(__dirname, '..', 'static', 'images')));
+app.use('/files', express.static(path.join(__dirname, '..', 'static', 'files')));
+
 // Health check endpoint (no database required)
 app.get('/api/health', (req, res) => {
 	res.json({ 
@@ -421,7 +425,7 @@ app.put('/api/gallery/:id', async (req, res) => {
 	});
 
 	// ==================== Multer Configuration ====================
-	// Configure multer for file uploads (memory storage)
+	// Configure multer for image uploads (memory storage)
 	const upload = multer({
 		storage: multer.memoryStorage(),
 		limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
@@ -433,6 +437,20 @@ app.put('/api/gallery/:id', async (req, res) => {
 				return cb(null, true);
 			}
 			cb(new Error('Only image files are allowed'));
+		}
+	});
+
+	// Configure multer for general file uploads (non-images)
+	const uploadFile = multer({
+		storage: multer.memoryStorage(),
+		limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit for files
+		fileFilter: (req, file, cb) => {
+			const allowedExtensions = /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|csv|zip|rar|7z)$/i;
+			const extname = allowedExtensions.test(path.extname(file.originalname));
+			if (extname) {
+				return cb(null, true);
+			}
+			cb(new Error('File type not allowed. Allowed types: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, TXT, CSV, ZIP, RAR, 7Z'));
 		}
 	});
 
@@ -935,7 +953,7 @@ app.put('/api/gallery/:id', async (req, res) => {
 	});
 
 	// POST /api/news/upload-file - Upload file for rich text editor
-	app.post('/api/news/upload-file', upload.single('file'), async (req, res) => {
+	app.post('/api/news/upload-file', uploadFile.single('file'), async (req, res) => {
 		const { club_id } = req.body;
 		console.log('[News File Upload API] POST request, Club ID:', club_id);
 
@@ -948,8 +966,8 @@ app.put('/api/gallery/:id', async (req, res) => {
 		}
 
 		try {
-			// Create files directory inside news folder
-			const filesPath = path.join(__dirname, '..', 'static', 'images', 'clubs', club_id, 'news', 'files');
+			// Create files directory: static/files/clubs/{club_id}/news
+			const filesPath = path.join(__dirname, '..', 'static', 'files', 'clubs', club_id, 'news');
 			if (!fs.existsSync(filesPath)) {
 				fs.mkdirSync(filesPath, { recursive: true });
 			}
@@ -972,12 +990,52 @@ app.put('/api/gallery/:id', async (req, res) => {
 			await fs.promises.writeFile(filePath, req.file.buffer);
 
 			// Return URL for the file
-			const fileUrl = `/images/clubs/${club_id}/news/files/${fileFilename}`;
+			const fileUrl = `/files/clubs/${club_id}/news/${fileFilename}`;
 
 			console.log('[News File Upload API] File uploaded:', fileFilename, version > 1 ? `(version ${version})` : '');
 			res.json({ success: true, url: fileUrl, filename: fileFilename });
 		} catch (error) {
 			console.error('[News File Upload API] Error:', error);
+			res.status(500).json({ success: false, error: error.message });
+		}
+	});
+
+	// GET /api/news/files - Get list of uploaded files
+	app.get('/api/news/files', async (req, res) => {
+		const { club_id } = req.query;
+		console.log('[News Files API] GET request, Club ID:', club_id);
+
+		if (!club_id) {
+			return res.status(400).json({ success: false, error: 'Club ID is required' });
+		}
+
+		try {
+			const filesPath = path.join(__dirname, '..', 'static', 'files', 'clubs', club_id, 'news');
+			
+			if (!fs.existsSync(filesPath)) {
+				return res.json({ success: true, files: [] });
+			}
+
+			const files = await fs.promises.readdir(filesPath);
+			const fileList = await Promise.all(
+				files.map(async (filename) => {
+					const filePath = path.join(filesPath, filename);
+					const stats = await fs.promises.stat(filePath);
+					return {
+						filename,
+						url: `/files/clubs/${club_id}/news/${filename}`,
+						size: stats.size
+					};
+				})
+			);
+
+			// Sort by filename
+			fileList.sort((a, b) => a.filename.localeCompare(b.filename));
+
+			console.log('[News Files API] Found', fileList.length, 'files');
+			res.json({ success: true, files: fileList });
+		} catch (error) {
+			console.error('[News Files API] Error:', error);
 			res.status(500).json({ success: false, error: error.message });
 		}
 	});
