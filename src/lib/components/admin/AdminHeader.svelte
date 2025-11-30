@@ -160,6 +160,16 @@
 					<li class="relative">
 						<button
 							type="button"
+							onclick={() => handleMenuClick('/news')}
+							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:bg-gray-600 bg-transparent border-0 cursor-pointer w-full text-left md:w-auto"
+							class:bg-gray-800={$page.url.pathname.startsWith(`/${lang}/admin/news`)}
+						>
+							{lang === 'fr' ? 'Actualités' : 'News'}
+						</button>
+					</li>
+					<li class="relative">
+						<button
+							type="button"
 							onclick={() => handleMenuClick('/profile')}
 							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:bg-gray-600 bg-transparent border-0 cursor-pointer w-full text-left md:w-auto"
 							class:bg-gray-800={$page.url.pathname.startsWith(`/${lang}/admin/profile`)}

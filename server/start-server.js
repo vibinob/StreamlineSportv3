@@ -536,8 +536,9 @@ app.put('/api/gallery/:id', async (req, res) => {
 				console.log('[Slider API] Saved image_fr:', imageFrFilename);
 			}
 
-			if (!imageEnFilename || !imageFrFilename) {
-				return res.status(400).json({ success: false, error: 'Both image_en and image_fr are required' });
+			// At least one image is required
+			if (!imageEnFilename && !imageFrFilename) {
+				return res.status(400).json({ success: false, error: 'At least one image (image_en or image_fr) is required' });
 			}
 
 			// Get max order
@@ -548,7 +549,7 @@ app.put('/api/gallery/:id', async (req, res) => {
 			const result = await query(
 				`INSERT INTO slider (image_en, image_fr, link_en, link_fr, \`order\`, date_created, status) 
 				VALUES (?, ?, ?, ?, ?, NOW(), 1)`,
-				[imageEnFilename, imageFrFilename, link_en || null, link_fr || null, newOrder]
+				[imageEnFilename || null, imageFrFilename || null, link_en || null, link_fr || null, newOrder]
 			);
 			console.log('[Slider API] Created slider with ID:', result.insertId, 'Order:', newOrder);
 			res.json({ success: true, data: { id: result.insertId } });
@@ -876,6 +877,679 @@ app.put('/api/gallery/:id', async (req, res) => {
 		}
 	});
 
+	// ==================== News API ====================
+
+	// Helper function to get news images directory
+	function getNewsImagesPath(clubId) {
+		const basePath = path.join(__dirname, '..', 'static', 'images', 'clubs', clubId, 'news');
+		const thumbnailPath = path.join(basePath, 'thumbnail');
+		return { basePath, thumbnailPath };
+	}
+
+	// Helper function to ensure directories exist
+	function ensureNewsDirectoriesExist(basePath, thumbnailPath) {
+		if (!fs.existsSync(basePath)) {
+			fs.mkdirSync(basePath, { recursive: true });
+		}
+		if (!fs.existsSync(thumbnailPath)) {
+			fs.mkdirSync(thumbnailPath, { recursive: true });
+		}
+	}
+
+	// GET /api/news - Get all news
+	app.get('/api/news', async (req, res) => {
+		console.log('[News API] GET request received');
+		try {
+			const rows = await query(
+				`SELECT 
+					n.id,
+					n.author,
+					n.news_date,
+					n.show_in_homepage,
+					n.\`order\`,
+					n.post_to_public,
+					n.post_to_member,
+					n.date_added,
+					n.status,
+					nc_en.id as content_en_id,
+					nc_en.language_id as language_en_id,
+					nc_en.title as title_en,
+					nc_en.summary as summary_en,
+					nc_en.article as article_en,
+					nc_en.image_filename as image_en,
+					nc_en.image_thumbnail as thumbnail_en,
+					nc_en.slug_url as slug_en,
+					nc_fr.id as content_fr_id,
+					nc_fr.language_id as language_fr_id,
+					nc_fr.title as title_fr,
+					nc_fr.summary as summary_fr,
+					nc_fr.article as article_fr,
+					nc_fr.image_filename as image_fr,
+					nc_fr.image_thumbnail as thumbnail_fr,
+					nc_fr.slug_url as slug_fr
+				FROM news n
+				LEFT JOIN news_content nc_en ON n.id = nc_en.news_id AND nc_en.language_id = 1 AND nc_en.status != 2
+				LEFT JOIN news_content nc_fr ON n.id = nc_fr.news_id AND nc_fr.language_id = 2 AND nc_fr.status != 2
+				WHERE n.status != 2 
+				ORDER BY n.\`order\` ASC, n.news_date DESC, n.id DESC`
+			);
+			console.log('[News API] Query returned', rows.length, 'news items');
+			res.json({ success: true, data: rows });
+		} catch (error) {
+			console.error('[News API] Error:', error);
+			res.status(500).json({ success: false, error: error.message });
+		}
+	});
+
+	// GET /api/news/:id - Get single news item
+	app.get('/api/news/:id', async (req, res) => {
+		const { id } = req.params;
+		console.log('[News API] GET by ID:', id);
+		try {
+			const rows = await query(
+				`SELECT 
+					n.id,
+					n.author,
+					n.news_date,
+					n.show_in_homepage,
+					n.\`order\`,
+					n.post_to_public,
+					n.post_to_member,
+					n.date_added,
+					n.status,
+					nc_en.id as content_en_id,
+					nc_en.language_id as language_en_id,
+					nc_en.title as title_en,
+					nc_en.summary as summary_en,
+					nc_en.article as article_en,
+					nc_en.image_filename as image_en,
+					nc_en.image_thumbnail as thumbnail_en,
+					nc_en.slug_url as slug_en,
+					nc_fr.id as content_fr_id,
+					nc_fr.language_id as language_fr_id,
+					nc_fr.title as title_fr,
+					nc_fr.summary as summary_fr,
+					nc_fr.article as article_fr,
+					nc_fr.image_filename as image_fr,
+					nc_fr.image_thumbnail as thumbnail_fr,
+					nc_fr.slug_url as slug_fr
+				FROM news n
+				LEFT JOIN news_content nc_en ON n.id = nc_en.news_id AND nc_en.language_id = 1 AND nc_en.status != 2
+				LEFT JOIN news_content nc_fr ON n.id = nc_fr.news_id AND nc_fr.language_id = 2 AND nc_fr.status != 2
+				WHERE n.id = ? AND n.status != 2`,
+				[id]
+			);
+			if (rows.length === 0) {
+				return res.status(404).json({ success: false, error: 'News not found' });
+			}
+			res.json({ success: true, data: rows[0] });
+		} catch (error) {
+			console.error('[News API] Error:', error);
+			res.status(500).json({ success: false, error: error.message });
+		}
+	});
+
+	// POST /api/news - Create new news with bilingual content
+	app.post('/api/news', upload.fields([
+		{ name: 'image_en', maxCount: 1 },
+		{ name: 'image_fr', maxCount: 1 },
+		{ name: 'thumbnail_en', maxCount: 1 },
+		{ name: 'thumbnail_fr', maxCount: 1 }
+	]), async (req, res) => {
+		console.log('[News API] POST request received');
+		console.log('[News API] Request body:', req.body);
+		console.log('[News API] Request files:', req.files);
+		const {
+			author,
+			news_date,
+			show_in_homepage,
+			post_to_public,
+			post_to_member,
+			club_id,
+			// English content
+			title_en,
+			summary_en,
+			article_en,
+			slug_en,
+			// French content
+			title_fr,
+			summary_fr,
+			article_fr,
+			slug_fr,
+			added_by
+		} = req.body;
+
+		if (!club_id) {
+			console.error('[News API] Missing club_id. Received body:', req.body);
+			return res.status(400).json({ success: false, error: 'Club ID is required' });
+		}
+
+		// Author is required for basic news creation
+		if (!author || (typeof author === 'string' && author.trim() === '')) {
+			console.error('[News API] Missing or empty author. Received body:', req.body);
+			return res.status(400).json({ success: false, error: 'Author is required' });
+		}
+
+		// Content (title, summary, article, images) is optional - can be added later via content editor
+
+		try {
+			const newsPath = getNewsImagesPath(club_id);
+			ensureNewsDirectoriesExist(newsPath.basePath, newsPath.thumbnailPath);
+
+			let imageEnFilename = null;
+			let imageFrFilename = null;
+			let thumbnailEnFilename = null;
+			let thumbnailFrFilename = null;
+
+			// Process image_en
+			if (req.files && req.files['image_en'] && req.files['image_en'][0]) {
+				const file = req.files['image_en'][0];
+				const timestamp = Date.now();
+				const ext = path.extname(file.originalname);
+				imageEnFilename = `news_en_${timestamp}${ext}`;
+				const imagePath = path.join(newsPath.basePath, imageEnFilename);
+				await fs.promises.writeFile(imagePath, file.buffer);
+				console.log('[News API] Saved image_en:', imageEnFilename);
+			}
+
+			// Process image_fr
+			if (req.files && req.files['image_fr'] && req.files['image_fr'][0]) {
+				const file = req.files['image_fr'][0];
+				const timestamp = Date.now();
+				const ext = path.extname(file.originalname);
+				imageFrFilename = `news_fr_${timestamp}${ext}`;
+				const imagePath = path.join(newsPath.basePath, imageFrFilename);
+				await fs.promises.writeFile(imagePath, file.buffer);
+				console.log('[News API] Saved image_fr:', imageFrFilename);
+			}
+
+			// Process thumbnail_en
+			if (req.files && req.files['thumbnail_en'] && req.files['thumbnail_en'][0]) {
+				const file = req.files['thumbnail_en'][0];
+				const timestamp = Date.now();
+				const ext = path.extname(file.originalname);
+				thumbnailEnFilename = `thumb_en_${timestamp}${ext}`;
+				const thumbnailPath = path.join(newsPath.thumbnailPath, thumbnailEnFilename);
+				await sharp(file.buffer)
+					.resize(300, 300, { fit: 'inside', withoutEnlargement: true })
+					.toFile(thumbnailPath);
+				console.log('[News API] Saved thumbnail_en:', thumbnailEnFilename);
+			} else if (imageEnFilename && req.files && req.files['image_en'] && req.files['image_en'][0]) {
+				// Auto-generate thumbnail from main image
+				const file = req.files['image_en'][0];
+				const timestamp = Date.now();
+				const ext = path.extname(file.originalname);
+				thumbnailEnFilename = `thumb_en_${timestamp}${ext}`;
+				const thumbnailPath = path.join(newsPath.thumbnailPath, thumbnailEnFilename);
+				await sharp(file.buffer)
+					.resize(300, 300, { fit: 'inside', withoutEnlargement: true })
+					.toFile(thumbnailPath);
+				console.log('[News API] Auto-generated thumbnail_en:', thumbnailEnFilename);
+			}
+
+			// Process thumbnail_fr
+			if (req.files && req.files['thumbnail_fr'] && req.files['thumbnail_fr'][0]) {
+				const file = req.files['thumbnail_fr'][0];
+				const timestamp = Date.now();
+				const ext = path.extname(file.originalname);
+				thumbnailFrFilename = `thumb_fr_${timestamp}${ext}`;
+				const thumbnailPath = path.join(newsPath.thumbnailPath, thumbnailFrFilename);
+				await sharp(file.buffer)
+					.resize(300, 300, { fit: 'inside', withoutEnlargement: true })
+					.toFile(thumbnailPath);
+				console.log('[News API] Saved thumbnail_fr:', thumbnailFrFilename);
+			} else if (imageFrFilename && req.files && req.files['image_fr'] && req.files['image_fr'][0]) {
+				// Auto-generate thumbnail from main image
+				const file = req.files['image_fr'][0];
+				const timestamp = Date.now();
+				const ext = path.extname(file.originalname);
+				thumbnailFrFilename = `thumb_fr_${timestamp}${ext}`;
+				const thumbnailPath = path.join(newsPath.thumbnailPath, thumbnailFrFilename);
+				await sharp(file.buffer)
+					.resize(300, 300, { fit: 'inside', withoutEnlargement: true })
+					.toFile(thumbnailPath);
+				console.log('[News API] Auto-generated thumbnail_fr:', thumbnailFrFilename);
+			}
+
+			// Get max order
+			const maxOrderResult = await query(`SELECT MAX(\`order\`) as max_order FROM news WHERE status != 2`);
+			const maxOrder = maxOrderResult[0]?.max_order ?? 0;
+			const newOrder = maxOrder + 1;
+
+			// Insert main news record
+			// Handle boolean values from FormData (they come as strings '1' or '0')
+			const showHomepage = show_in_homepage === '1' || show_in_homepage === true || show_in_homepage === 1;
+			const postPublic = post_to_public === '1' || post_to_public === true || post_to_public === 1;
+			const postMember = post_to_member === '1' || post_to_member === true || post_to_member === 1;
+
+			const newsResult = await query(
+				`INSERT INTO news (author, news_date, show_in_homepage, \`order\`, post_to_public, post_to_member, date_added, status) 
+				VALUES (?, ?, ?, ?, ?, ?, NOW(), 1)`,
+				[
+					author || '',
+					news_date || new Date().toISOString().split('T')[0],
+					showHomepage ? 1 : 0,
+					newOrder,
+					postPublic ? 1 : 0,
+					postMember ? 1 : 0
+				]
+			);
+
+			const newsId = newsResult.insertId;
+			console.log('[News API] Created news with ID:', newsId, 'Order:', newOrder);
+
+			// Insert English content if provided
+			if (title_en) {
+				await query(
+					`INSERT INTO news_content (news_id, language_id, title, summary, article, image_filename, image_thumbnail, slug_url, date_added, added_by, status) 
+					VALUES (?, 1, ?, ?, ?, ?, ?, ?, NOW(), ?, 1)`,
+					[
+						newsId,
+						title_en,
+						summary_en || null,
+						article_en || null,
+						imageEnFilename || null,
+						thumbnailEnFilename || null,
+						slug_en || null,
+						added_by || null
+					]
+				);
+				console.log('[News API] Created English content for news ID:', newsId);
+			}
+
+			// Insert French content if provided
+			if (title_fr) {
+				await query(
+					`INSERT INTO news_content (news_id, language_id, title, summary, article, image_filename, image_thumbnail, slug_url, date_added, added_by, status) 
+					VALUES (?, 2, ?, ?, ?, ?, ?, ?, NOW(), ?, 1)`,
+					[
+						newsId,
+						title_fr,
+						summary_fr || null,
+						article_fr || null,
+						imageFrFilename || null,
+						thumbnailFrFilename || null,
+						slug_fr || null,
+						added_by || null
+					]
+				);
+				console.log('[News API] Created French content for news ID:', newsId);
+			}
+
+			res.json({ success: true, data: { id: newsId } });
+		} catch (error) {
+			console.error('[News API] Error:', error);
+			res.status(500).json({ success: false, error: error.message });
+		}
+	});
+
+	// PUT /api/news/:id - Update news
+	app.put('/api/news/:id', upload.fields([
+		{ name: 'image_en', maxCount: 1 },
+		{ name: 'image_fr', maxCount: 1 },
+		{ name: 'thumbnail_en', maxCount: 1 },
+		{ name: 'thumbnail_fr', maxCount: 1 }
+	]), async (req, res) => {
+		const { id } = req.params;
+		console.log('[News API] PUT request for ID:', id);
+		const {
+			author,
+			news_date,
+			show_in_homepage,
+			order,
+			post_to_public,
+			post_to_member,
+			club_id,
+			// English content
+			title_en,
+			summary_en,
+			article_en,
+			slug_en,
+			// French content
+			title_fr,
+			summary_fr,
+			article_fr,
+			slug_fr,
+			updated_by
+		} = req.body;
+
+		if (!club_id) {
+			return res.status(400).json({ success: false, error: 'Club ID is required' });
+		}
+
+		try {
+			// Get existing news
+			const existingRows = await query(`SELECT * FROM news WHERE id = ? AND status != 2`, [id]);
+			if (existingRows.length === 0) {
+				return res.status(404).json({ success: false, error: 'News not found' });
+			}
+
+			const newsPath = getNewsImagesPath(club_id);
+			ensureNewsDirectoriesExist(newsPath.basePath, newsPath.thumbnailPath);
+
+			// Get existing content
+			const existingContent = await query(
+				`SELECT * FROM news_content WHERE news_id = ? AND status != 2`,
+				[id]
+			);
+			const existingEn = existingContent.find(c => c.language_id === 1);
+			const existingFr = existingContent.find(c => c.language_id === 2);
+
+			let imageEnFilename = null;
+			let imageFrFilename = null;
+			let thumbnailEnFilename = null;
+			let thumbnailFrFilename = null;
+
+			// Process image_en if uploaded
+			if (req.files && req.files['image_en'] && req.files['image_en'][0]) {
+				const file = req.files['image_en'][0];
+				const timestamp = Date.now();
+				const ext = path.extname(file.originalname);
+				imageEnFilename = `news_en_${timestamp}${ext}`;
+				const imagePath = path.join(newsPath.basePath, imageEnFilename);
+				await fs.promises.writeFile(imagePath, file.buffer);
+
+				// Delete old image if exists
+				if (existingEn && existingEn.image_filename) {
+					const oldImagePath = path.join(newsPath.basePath, existingEn.image_filename);
+					try {
+						if (fs.existsSync(oldImagePath)) {
+							await fs.promises.unlink(oldImagePath);
+						}
+					} catch (fileError) {
+						console.warn('[News API] Error deleting old image_en:', fileError);
+					}
+				}
+				console.log('[News API] Updated image_en:', imageEnFilename);
+			}
+
+			// Process image_fr if uploaded
+			if (req.files && req.files['image_fr'] && req.files['image_fr'][0]) {
+				const file = req.files['image_fr'][0];
+				const timestamp = Date.now();
+				const ext = path.extname(file.originalname);
+				imageFrFilename = `news_fr_${timestamp}${ext}`;
+				const imagePath = path.join(newsPath.basePath, imageFrFilename);
+				await fs.promises.writeFile(imagePath, file.buffer);
+
+				// Delete old image if exists
+				if (existingFr && existingFr.image_filename) {
+					const oldImagePath = path.join(newsPath.basePath, existingFr.image_filename);
+					try {
+						if (fs.existsSync(oldImagePath)) {
+							await fs.promises.unlink(oldImagePath);
+						}
+					} catch (fileError) {
+						console.warn('[News API] Error deleting old image_fr:', fileError);
+					}
+				}
+				console.log('[News API] Updated image_fr:', imageFrFilename);
+			}
+
+			// Process thumbnails
+			if (req.files && req.files['thumbnail_en'] && req.files['thumbnail_en'][0]) {
+				const file = req.files['thumbnail_en'][0];
+				const timestamp = Date.now();
+				const ext = path.extname(file.originalname);
+				thumbnailEnFilename = `thumb_en_${timestamp}${ext}`;
+				const thumbnailPath = path.join(newsPath.thumbnailPath, thumbnailEnFilename);
+				await sharp(file.buffer)
+					.resize(300, 300, { fit: 'inside', withoutEnlargement: true })
+					.toFile(thumbnailPath);
+
+				// Delete old thumbnail
+				if (existingEn && existingEn.image_thumbnail) {
+					const oldThumbPath = path.join(newsPath.thumbnailPath, existingEn.image_thumbnail);
+					try {
+						if (fs.existsSync(oldThumbPath)) {
+							await fs.promises.unlink(oldThumbPath);
+						}
+					} catch (fileError) {
+						console.warn('[News API] Error deleting old thumbnail_en:', fileError);
+					}
+				}
+			} else if (imageEnFilename && req.files && req.files['image_en'] && req.files['image_en'][0]) {
+				// Auto-generate thumbnail from new main image
+				const file = req.files['image_en'][0];
+				const timestamp = Date.now();
+				const ext = path.extname(file.originalname);
+				thumbnailEnFilename = `thumb_en_${timestamp}${ext}`;
+				const thumbnailPath = path.join(newsPath.thumbnailPath, thumbnailEnFilename);
+				await sharp(file.buffer)
+					.resize(300, 300, { fit: 'inside', withoutEnlargement: true })
+					.toFile(thumbnailPath);
+			}
+
+			if (req.files && req.files['thumbnail_fr'] && req.files['thumbnail_fr'][0]) {
+				const file = req.files['thumbnail_fr'][0];
+				const timestamp = Date.now();
+				const ext = path.extname(file.originalname);
+				thumbnailFrFilename = `thumb_fr_${timestamp}${ext}`;
+				const thumbnailPath = path.join(newsPath.thumbnailPath, thumbnailFrFilename);
+				await sharp(file.buffer)
+					.resize(300, 300, { fit: 'inside', withoutEnlargement: true })
+					.toFile(thumbnailPath);
+
+				// Delete old thumbnail
+				if (existingFr && existingFr.image_thumbnail) {
+					const oldThumbPath = path.join(newsPath.thumbnailPath, existingFr.image_thumbnail);
+					try {
+						if (fs.existsSync(oldThumbPath)) {
+							await fs.promises.unlink(oldThumbPath);
+						}
+					} catch (fileError) {
+						console.warn('[News API] Error deleting old thumbnail_fr:', fileError);
+					}
+				}
+			} else if (imageFrFilename && req.files && req.files['image_fr'] && req.files['image_fr'][0]) {
+				// Auto-generate thumbnail from new main image
+				const file = req.files['image_fr'][0];
+				const timestamp = Date.now();
+				const ext = path.extname(file.originalname);
+				thumbnailFrFilename = `thumb_fr_${timestamp}${ext}`;
+				const thumbnailPath = path.join(newsPath.thumbnailPath, thumbnailFrFilename);
+				await sharp(file.buffer)
+					.resize(300, 300, { fit: 'inside', withoutEnlargement: true })
+					.toFile(thumbnailPath);
+			}
+
+			// Update main news record
+			const updateFields = [];
+			const updateValues = [];
+
+			if (author !== undefined) {
+				updateFields.push('author = ?');
+				updateValues.push(author);
+			}
+			if (news_date !== undefined) {
+				updateFields.push('news_date = ?');
+				updateValues.push(news_date);
+			}
+			if (show_in_homepage !== undefined) {
+				updateFields.push('show_in_homepage = ?');
+				updateValues.push(show_in_homepage ? 1 : 0);
+			}
+			if (order !== undefined) {
+				updateFields.push('`order` = ?');
+				updateValues.push(order);
+			}
+			if (post_to_public !== undefined) {
+				updateFields.push('post_to_public = ?');
+				updateValues.push(post_to_public ? 1 : 0);
+			}
+			if (post_to_member !== undefined) {
+				updateFields.push('post_to_member = ?');
+				updateValues.push(post_to_member ? 1 : 0);
+			}
+
+			if (updateFields.length > 0) {
+				updateValues.push(id);
+				await query(
+					`UPDATE news SET ${updateFields.join(', ')} WHERE id = ? AND status != 2`,
+					updateValues
+				);
+			}
+
+			// Update or insert English content
+			if (title_en !== undefined) {
+				if (existingEn) {
+					const contentFields = [];
+					const contentValues = [];
+					if (title_en !== undefined) {
+						contentFields.push('title = ?');
+						contentValues.push(title_en);
+					}
+					if (summary_en !== undefined) {
+						contentFields.push('summary = ?');
+						contentValues.push(summary_en || null);
+					}
+					if (article_en !== undefined) {
+						contentFields.push('article = ?');
+						contentValues.push(article_en || null);
+					}
+					if (imageEnFilename) {
+						contentFields.push('image_filename = ?');
+						contentValues.push(imageEnFilename);
+					}
+					if (thumbnailEnFilename) {
+						contentFields.push('image_thumbnail = ?');
+						contentValues.push(thumbnailEnFilename);
+					}
+					if (slug_en !== undefined) {
+						contentFields.push('slug_url = ?');
+						contentValues.push(slug_en || null);
+					}
+					if (updated_by !== undefined) {
+						contentFields.push('updated_by = ?');
+						contentValues.push(updated_by || null);
+					}
+					contentFields.push('date_updated = NOW()');
+					contentValues.push(existingEn.id);
+
+					if (contentFields.length > 1) {
+						await query(
+							`UPDATE news_content SET ${contentFields.join(', ')} WHERE id = ? AND status != 2`,
+							contentValues
+						);
+					}
+				} else if (title_en) {
+					// Insert new English content
+					await query(
+						`INSERT INTO news_content (news_id, language_id, title, summary, article, image_filename, image_thumbnail, slug_url, date_added, added_by, status) 
+						VALUES (?, 1, ?, ?, ?, ?, ?, ?, NOW(), ?, 1)`,
+						[
+							id,
+							title_en,
+							summary_en || null,
+							article_en || null,
+							imageEnFilename || null,
+							thumbnailEnFilename || null,
+							slug_en || null,
+							updated_by || null
+						]
+					);
+				}
+			}
+
+			// Update or insert French content
+			if (title_fr !== undefined) {
+				if (existingFr) {
+					const contentFields = [];
+					const contentValues = [];
+					if (title_fr !== undefined) {
+						contentFields.push('title = ?');
+						contentValues.push(title_fr);
+					}
+					if (summary_fr !== undefined) {
+						contentFields.push('summary = ?');
+						contentValues.push(summary_fr || null);
+					}
+					if (article_fr !== undefined) {
+						contentFields.push('article = ?');
+						contentValues.push(article_fr || null);
+					}
+					if (imageFrFilename) {
+						contentFields.push('image_filename = ?');
+						contentValues.push(imageFrFilename);
+					}
+					if (thumbnailFrFilename) {
+						contentFields.push('image_thumbnail = ?');
+						contentValues.push(thumbnailFrFilename);
+					}
+					if (slug_fr !== undefined) {
+						contentFields.push('slug_url = ?');
+						contentValues.push(slug_fr || null);
+					}
+					if (updated_by !== undefined) {
+						contentFields.push('updated_by = ?');
+						contentValues.push(updated_by || null);
+					}
+					contentFields.push('date_updated = NOW()');
+					contentValues.push(existingFr.id);
+
+					if (contentFields.length > 1) {
+						await query(
+							`UPDATE news_content SET ${contentFields.join(', ')} WHERE id = ? AND status != 2`,
+							contentValues
+						);
+					}
+				} else if (title_fr) {
+					// Insert new French content
+					await query(
+						`INSERT INTO news_content (news_id, language_id, title, summary, article, image_filename, image_thumbnail, slug_url, date_added, added_by, status) 
+						VALUES (?, 2, ?, ?, ?, ?, ?, ?, NOW(), ?, 1)`,
+						[
+							id,
+							title_fr,
+							summary_fr || null,
+							article_fr || null,
+							imageFrFilename || null,
+							thumbnailFrFilename || null,
+							slug_fr || null,
+							updated_by || null
+						]
+					);
+				}
+			}
+
+			console.log('[News API] Updated news ID:', id);
+			res.json({ success: true });
+		} catch (error) {
+			console.error('[News API] Error:', error);
+			res.status(500).json({ success: false, error: error.message });
+		}
+	});
+
+	// DELETE /api/news/:id - Soft delete news
+	app.delete('/api/news/:id', async (req, res) => {
+		const { id } = req.params;
+		console.log('[News API] DELETE request for ID:', id);
+		try {
+			await query(`UPDATE news SET status = 2 WHERE id = ?`, [id]);
+			await query(`UPDATE news_content SET status = 2 WHERE news_id = ?`, [id]);
+			console.log('[News API] Deleted news ID:', id);
+			res.json({ success: true });
+		} catch (error) {
+			console.error('[News API] Error:', error);
+			res.status(500).json({ success: false, error: error.message });
+		}
+	});
+
+	// PUT /api/news/:id/order - Update news order
+	app.put('/api/news/:id/order', async (req, res) => {
+		const { id } = req.params;
+		const { order } = req.body;
+		console.log('[News API] Update order for ID:', id, 'New order:', order);
+		try {
+			await query(`UPDATE news SET \`order\` = ? WHERE id = ? AND status != 2`, [order, id]);
+			console.log('[News API] Updated order for news ID:', id);
+			res.json({ success: true });
+		} catch (error) {
+			console.error('[News API] Error:', error);
+			res.status(500).json({ success: false, error: error.message });
+		}
+	});
+
 // Graceful shutdown
 process.on('SIGINT', async () => {
 	console.log('\nShutting down gracefully...');
@@ -912,7 +1586,8 @@ try {
 		console.log(`  - DB Test: ${serverUrl}/api/test-db`);
 		console.log(`  - Menu: ${serverUrl}/api/menu?lang=fr`);
 		console.log(`  - Public Gallery: ${serverUrl}/api/public/gallery`);
-		console.log(`  - Slider: ${serverUrl}/api/slider\n`);
+		console.log(`  - Slider: ${serverUrl}/api/slider`);
+		console.log(`  - News: ${serverUrl}/api/news\n`);
 	});
 } catch (error) {
 	console.error('Failed to start server:', error);

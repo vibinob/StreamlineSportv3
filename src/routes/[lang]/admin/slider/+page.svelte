@@ -134,8 +134,8 @@
 
 	// Create slider
 	async function createSlider() {
-		if (!selectedImageEn || !selectedImageFr) {
-			error = lang === 'fr' ? 'Les deux images (EN et FR) sont requises' : 'Both images (EN and FR) are required';
+		if (!selectedImageEn && !selectedImageFr) {
+			error = lang === 'fr' ? 'Au moins une image (EN ou FR) est requise' : 'At least one image (EN or FR) is required';
 			return;
 		}
 
@@ -329,29 +329,33 @@
 		{:else}
 			<!-- Slider Card/Grid -->
 			{#if viewMode === 'grid'}
-				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
 					{#each sliders as slider, index}
 						<div class="bg-white rounded-lg shadow-md overflow-hidden">
-							<!-- Both Images Side by Side -->
-							<div class="grid grid-cols-2 gap-2 p-2">
-								<div class="relative aspect-video">
-									<p class="text-xs text-gray-500 mb-1 text-center">EN</p>
-									<img
-										src={getImageUrl(slider.image_en)}
-										alt="Slider EN"
-										class="w-full h-full object-cover rounded"
-										loading="lazy"
-									/>
-								</div>
-								<div class="relative aspect-video">
-									<p class="text-xs text-gray-500 mb-1 text-center">FR</p>
-									<img
-										src={getImageUrl(slider.image_fr)}
-										alt="Slider FR"
-										class="w-full h-full object-cover rounded"
-										loading="lazy"
-									/>
-								</div>
+							<!-- Images Side by Side -->
+							<div class="grid {slider.image_en && slider.image_fr ? 'grid-cols-2' : 'grid-cols-1'} gap-2 p-2">
+								{#if slider.image_en}
+									<div class="relative aspect-video">
+										<p class="text-xs text-gray-500 mb-1 text-center">EN</p>
+										<img
+											src={getImageUrl(slider.image_en)}
+											alt="Slider EN"
+											class="w-full h-full object-cover rounded"
+											loading="lazy"
+										/>
+									</div>
+								{/if}
+								{#if slider.image_fr}
+									<div class="relative aspect-video">
+										<p class="text-xs text-gray-500 mb-1 text-center">FR</p>
+										<img
+											src={getImageUrl(slider.image_fr)}
+											alt="Slider FR"
+											class="w-full h-full object-cover rounded"
+											loading="lazy"
+										/>
+									</div>
+								{/if}
 							</div>
 							<!-- Order Controls -->
 							<div class="px-4 pb-2 flex justify-end gap-1">
@@ -432,20 +436,28 @@
 								{#each sliders as slider, index}
 									<tr class="hover:bg-gray-50">
 										<td class="px-6 py-4">
-											<img
-												src={getImageUrl(slider.image_en)}
-												alt="Slider EN"
-												class="w-72 h-40 object-cover rounded"
-												loading="lazy"
-											/>
+											{#if slider.image_en}
+												<img
+													src={getImageUrl(slider.image_en)}
+													alt="Slider EN"
+													class="w-72 h-40 object-cover rounded"
+													loading="lazy"
+												/>
+											{:else}
+												<p class="text-sm text-gray-400 italic">No EN image</p>
+											{/if}
 										</td>
 										<td class="px-6 py-4">
-											<img
-												src={getImageUrl(slider.image_fr)}
-												alt="Slider FR"
-												class="w-72 h-40 object-cover rounded"
-												loading="lazy"
-											/>
+											{#if slider.image_fr}
+												<img
+													src={getImageUrl(slider.image_fr)}
+													alt="Slider FR"
+													class="w-72 h-40 object-cover rounded"
+													loading="lazy"
+												/>
+											{:else}
+												<p class="text-sm text-gray-400 italic">No FR image</p>
+											{/if}
 										</td>
 										<td class="px-6 py-4">
 											<p class="text-sm text-gray-600 truncate max-w-xs">
@@ -512,6 +524,9 @@
 	<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
 		<div class="bg-white rounded-lg p-8 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
 			<h2 class="text-2xl font-bold mb-6">{lang === 'fr' ? 'Ajouter un slider' : 'Add Slider'}</h2>
+			<p class="text-sm text-gray-600 mb-4">
+				{lang === 'fr' ? 'Au moins une image (EN ou FR) est requise' : 'At least one image (EN or FR) is required'}
+			</p>
 			<form
 				onsubmit={(e) => {
 					e.preventDefault();
@@ -520,7 +535,7 @@
 				class="space-y-4"
 			>
 				<div>
-					<label for="add-image-en" class="block text-sm font-bold mb-2">Image EN:</label>
+					<label for="add-image-en" class="block text-sm font-bold mb-2">Image EN (Optional):</label>
 					<input
 						id="add-image-en"
 						type="file"
@@ -528,14 +543,13 @@
 						accept="image/*"
 						onchange={(e) => handleFileSelect(e, 'en')}
 						class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#1a3a5f]"
-						required
 					/>
 					{#if selectedImageEn}
 						<p class="text-sm text-gray-600 mt-1">{selectedImageEn.name}</p>
 					{/if}
 				</div>
 				<div>
-					<label for="add-image-fr" class="block text-sm font-bold mb-2">Image FR:</label>
+					<label for="add-image-fr" class="block text-sm font-bold mb-2">Image FR (Optional):</label>
 					<input
 						id="add-image-fr"
 						type="file"
@@ -543,7 +557,6 @@
 						accept="image/*"
 						onchange={(e) => handleFileSelect(e, 'fr')}
 						class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#1a3a5f]"
-						required
 					/>
 					{#if selectedImageFr}
 						<p class="text-sm text-gray-600 mt-1">{selectedImageFr.name}</p>
