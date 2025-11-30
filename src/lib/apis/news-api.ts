@@ -138,7 +138,9 @@ export async function createNews(data: CreateNewsData): Promise<ApiResponse<any>
 		formData.append('club_id', data.club_id);
 		
 		// English content
-		if (data.title_en) formData.append('title_en', data.title_en);
+		if (data.title_en !== undefined && data.title_en !== null && data.title_en.trim() !== '') {
+			formData.append('title_en', data.title_en.trim());
+		}
 		if (data.summary_en) formData.append('summary_en', data.summary_en);
 		if (data.article_en) formData.append('article_en', data.article_en);
 		if (data.image_en) formData.append('image_en', data.image_en);
@@ -146,7 +148,9 @@ export async function createNews(data: CreateNewsData): Promise<ApiResponse<any>
 		if (data.slug_en) formData.append('slug_en', data.slug_en);
 		
 		// French content
-		if (data.title_fr) formData.append('title_fr', data.title_fr);
+		if (data.title_fr !== undefined && data.title_fr !== null && data.title_fr.trim() !== '') {
+			formData.append('title_fr', data.title_fr.trim());
+		}
 		if (data.summary_fr) formData.append('summary_fr', data.summary_fr);
 		if (data.article_fr) formData.append('article_fr', data.article_fr);
 		if (data.image_fr) formData.append('image_fr', data.image_fr);

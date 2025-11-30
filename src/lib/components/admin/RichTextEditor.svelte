@@ -14,6 +14,7 @@
 	import { TableRow } from '@tiptap/extension-table-row';
 	import { TableCell } from '@tiptap/extension-table-cell';
 	import { TableHeader } from '@tiptap/extension-table-header';
+	import { ResizableImage } from '$lib/tiptap-extensions/resizable-image.js';
 	import { CURRENT_CLUB_ID } from '$lib/clubs/currentClub.js';
 
 	interface Props {
@@ -35,6 +36,10 @@
 	let showFileDialog = $state(false);
 	let uploadedFiles = $state<Array<{ filename: string; url: string; size?: number }>>([]);
 	let loadingFiles = $state(false);
+	let showImageDialog = $state(false);
+	let uploadedImages = $state<Array<{ filename: string; url: string; size?: number }>>([]);
+	let loadingImages = $state(false);
+	let imageDialogUploadInput: HTMLInputElement | null = $state(null);
 	let showCodeView = $state(false);
 	let codeViewTextarea: HTMLTextAreaElement | null = $state(null);
 
@@ -52,10 +57,8 @@
 					link: false,
 					underline: false
 				}),
-				Image.configure({
-					inline: true,
-					allowBase64: true
-				}),
+				// Use ResizableImage instead of regular Image extension
+				ResizableImage,
 				Link.configure({
 					openOnClick: false,
 					HTMLAttributes: {
@@ -186,8 +189,8 @@
 
 	function addImage() {
 		const url = window.prompt('Enter image URL:');
-		if (url) {
-			editor?.chain().focus().setImage({ src: url }).run();
+		if (url && editor) {
+			editor.chain().focus().setImage({ src: url, alt: '' }).run();
 		}
 	}
 
@@ -213,7 +216,7 @@
 
 			const result = await response.json();
 			if (result.success && result.url) {
-				editor.chain().focus().setImage({ src: result.url }).run();
+				editor.chain().focus().setImage({ src: result.url, alt: result.filename || '' }).run();
 			} else {
 				throw new Error(result.error || 'Upload failed');
 			}
@@ -230,6 +233,81 @@
 
 	function triggerImageUpload() {
 		imageUploadInput?.click();
+	}
+
+	async function loadUploadedImages() {
+		loadingImages = true;
+		try {
+			const response = await fetch(`/api/news/images?club_id=${CURRENT_CLUB_ID}`);
+			if (!response.ok) {
+				throw new Error('Failed to load images');
+			}
+			const result = await response.json();
+			if (result.success && result.images) {
+				uploadedImages = result.images;
+			}
+		} catch (error) {
+			console.error('Error loading images:', error);
+			uploadedImages = [];
+		} finally {
+			loadingImages = false;
+		}
+	}
+
+	function openImageDialog() {
+		showImageDialog = true;
+		loadUploadedImages();
+	}
+
+	function closeImageDialog() {
+		showImageDialog = false;
+	}
+
+	function insertImage(image: { filename: string; url: string }) {
+		if (editor) {
+			editor.chain().focus().setImage({ src: image.url, alt: image.filename }).run();
+		}
+		closeImageDialog();
+	}
+
+	async function uploadImageFromDialog(event: Event) {
+		const target = event.target as HTMLInputElement;
+		const file = target.files?.[0];
+		if (!file) return;
+
+		uploadingImage = true;
+		try {
+			const formData = new FormData();
+			formData.append('image', file);
+			formData.append('club_id', CURRENT_CLUB_ID);
+
+			const response = await fetch('/api/news/upload-image', {
+				method: 'POST',
+				body: formData
+			});
+
+			if (!response.ok) {
+				throw new Error('Failed to upload image');
+			}
+
+			const result = await response.json();
+			if (result.success && result.url) {
+				// Reload image list
+				await loadUploadedImages();
+				// Optionally insert the image immediately
+				insertImage({ filename: result.filename, url: result.url });
+			} else {
+				throw new Error(result.error || 'Upload failed');
+			}
+		} catch (error) {
+			console.error('Error uploading image:', error);
+			alert('Failed to upload image. Please try again.');
+		} finally {
+			uploadingImage = false;
+			if (imageDialogUploadInput) {
+				imageDialogUploadInput.value = '';
+			}
+		}
 	}
 
 	async function uploadFile(event: Event) {
@@ -608,9 +686,9 @@
 			</button>
 			<button
 				type="button"
-				onclick={triggerImageUpload}
+				onclick={openImageDialog}
 				class="px-2 py-1 rounded hover:bg-gray-200"
-				title="Upload Image"
+				title="Image Manager - Upload or Insert Images"
 				disabled={uploadingImage}
 			>
 				{uploadingImage ? '⏳' : '🖼️'}
@@ -789,6 +867,99 @@
 		></div>
 	</div>
 
+	<!-- Image Dialog -->
+	{#if showImageDialog}
+		<div 
+			class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" 
+			onclick={closeImageDialog}
+			onkeydown={(e) => e.key === 'Escape' && closeImageDialog()}
+			role="button"
+			tabindex="0"
+			aria-label="Close image dialog"
+		>
+			<div 
+				class="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[80vh] overflow-y-auto" 
+				onclick={(e) => e.stopPropagation()} 
+				onkeydown={(e) => e.stopPropagation()}
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="image-dialog-title"
+				tabindex="-1"
+			>
+				<div class="flex justify-between items-center mb-4">
+					<h3 id="image-dialog-title" class="text-xl font-bold">Image Manager</h3>
+					<button
+						type="button"
+						onclick={closeImageDialog}
+						class="text-gray-500 hover:text-gray-700 text-2xl"
+					>
+						×
+					</button>
+				</div>
+
+				<!-- Upload New Image Section -->
+				<div class="mb-6 p-4 border-2 border-dashed border-gray-300 rounded-lg">
+					<label for="image-dialog-upload" class="block text-sm font-bold mb-2">Upload New Image:</label>
+					<div class="flex gap-2 items-center">
+						<input
+							id="image-dialog-upload"
+							type="file"
+							bind:this={imageDialogUploadInput}
+							accept="image/*"
+							onchange={uploadImageFromDialog}
+							class="flex-1 px-4 py-2 border-2 border-gray-300 rounded-lg"
+							disabled={uploadingImage}
+						/>
+						{#if uploadingImage}
+							<span class="text-sm text-gray-500">Uploading...</span>
+						{/if}
+					</div>
+					<p class="text-xs text-gray-500 mt-2">
+						Supported: JPG, JPEG, PNG, GIF, WEBP, SVG
+					</p>
+				</div>
+
+				<!-- Images List -->
+				<div>
+					<h4 class="text-lg font-bold mb-3">Uploaded Images:</h4>
+					{#if loadingImages}
+						<div class="text-center py-8 text-gray-500">Loading images...</div>
+					{:else if uploadedImages.length === 0}
+						<div class="text-center py-8 text-gray-500">No images uploaded yet.</div>
+					{:else}
+						<div class="grid grid-cols-2 md:grid-cols-3 gap-4 max-h-96 overflow-y-auto">
+							{#each uploadedImages as image}
+								<div class="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow">
+									<div class="aspect-video bg-gray-100 flex items-center justify-center overflow-hidden">
+										<img 
+											src={image.url} 
+											alt={image.filename}
+											class="max-w-full max-h-full object-contain"
+											loading="lazy"
+										/>
+									</div>
+									<div class="p-3">
+										<p class="text-xs font-medium truncate mb-1" title={image.filename}>{image.filename}</p>
+										{#if image.size}
+											<p class="text-xs text-gray-500 mb-2">{(image.size / 1024).toFixed(2)} KB</p>
+										{/if}
+										<button
+											type="button"
+											onclick={() => insertImage(image)}
+											class="w-full px-3 py-2 bg-[#1a3a5f] text-white rounded-lg hover:bg-[#1a3a5f]/90 text-sm"
+										>
+											Insert
+										</button>
+									</div>
+								</div>
+							{/each}
+						</div>
+					{/if}
+				</div>
+			</div>
+		</div>
+	{/if}
+
 	<!-- File Dialog -->
 	{#if showFileDialog}
 		<div 
@@ -900,9 +1071,103 @@
 		pointer-events: none;
 	}
 
+	/* Heading styles */
+	:global(.ProseMirror h1) {
+		font-size: 2.25rem;
+		font-weight: 800;
+		line-height: 1.2;
+		margin-top: 0;
+		margin-bottom: 0.75rem;
+		color: #1a3a5f;
+	}
+
+	:global(.ProseMirror h2) {
+		font-size: 1.875rem;
+		font-weight: 700;
+		line-height: 1.3;
+		margin-top: 1.5rem;
+		margin-bottom: 0.75rem;
+		color: #1a3a5f;
+	}
+
+	:global(.ProseMirror h3) {
+		font-size: 1.5rem;
+		font-weight: 600;
+		line-height: 1.4;
+		margin-top: 1.25rem;
+		margin-bottom: 0.5rem;
+		color: #1a3a5f;
+	}
+
+	:global(.ProseMirror h4) {
+		font-size: 1.25rem;
+		font-weight: 600;
+		line-height: 1.5;
+		margin-top: 1rem;
+		margin-bottom: 0.5rem;
+		color: #1a3a5f;
+	}
+
+	:global(.ProseMirror h5) {
+		font-size: 1.125rem;
+		font-weight: 600;
+		line-height: 1.5;
+		margin-top: 0.75rem;
+		margin-bottom: 0.5rem;
+		color: #1a3a5f;
+	}
+
+	:global(.ProseMirror h6) {
+		font-size: 1rem;
+		font-weight: 600;
+		line-height: 1.5;
+		margin-top: 0.75rem;
+		margin-bottom: 0.5rem;
+		color: #1a3a5f;
+	}
+
 	:global(.ProseMirror img) {
 		max-width: 100%;
 		height: auto;
+	}
+
+	:global(.resizable-image-wrapper) {
+		position: relative;
+		display: inline-block;
+		max-width: 100%;
+		margin: 0.5rem 0;
+	}
+
+	:global(.resizable-image-wrapper img) {
+		display: block;
+		max-width: 100%;
+		height: auto;
+	}
+
+	:global(.resizable-image-wrapper .resize-handle) {
+		position: absolute;
+		bottom: 0;
+		right: 0;
+		width: 16px;
+		height: 16px;
+		background: #1a3a5f;
+		border: 2px solid white;
+		border-radius: 2px;
+		cursor: nwse-resize;
+		opacity: 0;
+		transition: opacity 0.2s;
+		z-index: 10;
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+	}
+
+	:global(.resizable-image-wrapper:hover .resize-handle),
+	:global(.resizable-image-wrapper.selected .resize-handle) {
+		opacity: 1;
+	}
+
+	:global(.ProseMirror .resizable-image-wrapper.ProseMirror-selectednode) {
+		outline: 2px solid #1a3a5f;
+		outline-offset: 2px;
 	}
 
 	:global(.ProseMirror a) {
@@ -910,8 +1175,49 @@
 		text-decoration: underline;
 	}
 
-	:global(.ProseMirror ul, .ProseMirror ol) {
+	/* List styles */
+	:global(.ProseMirror ul) {
+		list-style-type: disc;
 		padding-left: 1.5rem;
+		margin: 0.75rem 0;
+	}
+
+	:global(.ProseMirror ul li) {
+		display: list-item;
+		margin: 0.25rem 0;
+		padding-left: 0.25rem;
+	}
+
+	:global(.ProseMirror ul ul) {
+		list-style-type: circle;
+		margin-top: 0.25rem;
+		margin-bottom: 0.25rem;
+	}
+
+	:global(.ProseMirror ul ul ul) {
+		list-style-type: square;
+	}
+
+	:global(.ProseMirror ol) {
+		list-style-type: decimal;
+		padding-left: 1.5rem;
+		margin: 0.75rem 0;
+	}
+
+	:global(.ProseMirror ol li) {
+		display: list-item;
+		margin: 0.25rem 0;
+		padding-left: 0.25rem;
+	}
+
+	:global(.ProseMirror ol ol) {
+		list-style-type: lower-alpha;
+		margin-top: 0.25rem;
+		margin-bottom: 0.25rem;
+	}
+
+	:global(.ProseMirror ol ol ol) {
+		list-style-type: lower-roman;
 	}
 
 	:global(.ProseMirror blockquote) {

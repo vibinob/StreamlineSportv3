@@ -40,7 +40,9 @@
 		news_date: new Date().toISOString().split('T')[0],
 		show_in_homepage: false,
 		post_to_public: false,
-		post_to_member: false
+		post_to_member: false,
+		title_en: '',
+		title_fr: ''
 	});
 
 	// Load news
@@ -69,7 +71,9 @@
 			news_date: new Date().toISOString().split('T')[0],
 			show_in_homepage: false,
 			post_to_public: false,
-			post_to_member: false
+			post_to_member: false,
+			title_en: '',
+			title_fr: ''
 		};
 		showAddModal = true;
 	}
@@ -85,7 +89,9 @@
 			news_date: news.news_date || new Date().toISOString().split('T')[0],
 			show_in_homepage: news.show_in_homepage === 1,
 			post_to_public: news.post_to_public === 1,
-			post_to_member: news.post_to_member === 1
+			post_to_member: news.post_to_member === 1,
+			title_en: news.title_en || '',
+			title_fr: news.title_fr || ''
 		};
 		showEditModal = true;
 	}
@@ -127,6 +133,16 @@
 				post_to_member: formData.post_to_member,
 				club_id: CURRENT_CLUB_ID
 			};
+
+			// Add titles if provided (optional)
+			if (formData.title_en && formData.title_en.trim()) {
+				newsData.title_en = formData.title_en.trim();
+			}
+			if (formData.title_fr && formData.title_fr.trim()) {
+				newsData.title_fr = formData.title_fr.trim();
+			}
+			
+			console.log('[Create News] Sending data:', newsData); // Debug log
 			const result = await createNewsApi(newsData);
 			if (result.success) {
 				showAddModal = false;
@@ -419,6 +435,15 @@
 									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
 										{lang === 'fr' ? 'Date' : 'Date'}
 									</th>
+									<th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase w-20">
+										{lang === 'fr' ? 'Page d\'accueil' : 'Homepage'}
+									</th>
+									<th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase w-20">
+										{lang === 'fr' ? 'Public' : 'Public'}
+									</th>
+									<th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase w-20">
+										{lang === 'fr' ? 'Membres' : 'Members'}
+									</th>
 									<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase w-20">
 										{lang === 'fr' ? 'Ordre' : 'Order'}
 									</th>
@@ -458,6 +483,33 @@
 										</td>
 										<td class="px-6 py-4">
 											<p class="text-sm text-gray-600">{news.news_date}</p>
+										</td>
+										<td class="px-6 py-4 text-center">
+											{#if news.show_in_homepage === 1}
+												<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-600 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+												</svg>
+											{:else}
+												<span class="text-gray-300">—</span>
+											{/if}
+										</td>
+										<td class="px-6 py-4 text-center">
+											{#if news.post_to_public === 1}
+												<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-600 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+												</svg>
+											{:else}
+												<span class="text-gray-300">—</span>
+											{/if}
+										</td>
+										<td class="px-6 py-4 text-center">
+											{#if news.post_to_member === 1}
+												<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-600 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+												</svg>
+											{:else}
+												<span class="text-gray-300">—</span>
+											{/if}
 										</td>
 										<td class="px-6 py-4 whitespace-nowrap">
 											<div class="flex flex-col gap-1">
@@ -562,6 +614,36 @@
 					</div>
 				</div>
 
+				<!-- Title Fields (Optional) -->
+				<div class="grid grid-cols-2 gap-4">
+					<div>
+						<label for="add-title-en" class="block text-sm font-bold mb-2">
+							{lang === 'fr' ? 'Titre (Anglais)' : 'Title (English)'}:
+							<span class="text-gray-500 font-normal text-xs ml-1">({lang === 'fr' ? 'Optionnel' : 'Optional'})</span>
+						</label>
+						<input
+							id="add-title-en"
+							type="text"
+							bind:value={formData.title_en}
+							class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#1a3a5f]"
+							placeholder={lang === 'fr' ? 'Titre en anglais...' : 'English title...'}
+						/>
+					</div>
+					<div>
+						<label for="add-title-fr" class="block text-sm font-bold mb-2">
+							{lang === 'fr' ? 'Titre (Français)' : 'Title (French)'}:
+							<span class="text-gray-500 font-normal text-xs ml-1">({lang === 'fr' ? 'Optionnel' : 'Optional'})</span>
+						</label>
+						<input
+							id="add-title-fr"
+							type="text"
+							bind:value={formData.title_fr}
+							class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#1a3a5f]"
+							placeholder={lang === 'fr' ? 'Titre en français...' : 'French title...'}
+						/>
+					</div>
+				</div>
+
 				<div class="grid grid-cols-3 gap-4">
 					<label class="flex items-center gap-2">
 						<input type="checkbox" bind:checked={formData.show_in_homepage} class="w-4 h-4" />
@@ -627,6 +709,36 @@
 							type="date"
 							bind:value={formData.news_date}
 							class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#1a3a5f]"
+						/>
+					</div>
+				</div>
+
+				<!-- Title Fields (Optional) -->
+				<div class="grid grid-cols-2 gap-4">
+					<div>
+						<label for="edit-title-en" class="block text-sm font-bold mb-2">
+							{lang === 'fr' ? 'Titre (Anglais)' : 'Title (English)'}:
+							<span class="text-gray-500 font-normal text-xs ml-1">({lang === 'fr' ? 'Optionnel' : 'Optional'})</span>
+						</label>
+						<input
+							id="edit-title-en"
+							type="text"
+							bind:value={formData.title_en}
+							class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#1a3a5f]"
+							placeholder={lang === 'fr' ? 'Titre en anglais...' : 'English title...'}
+						/>
+					</div>
+					<div>
+						<label for="edit-title-fr" class="block text-sm font-bold mb-2">
+							{lang === 'fr' ? 'Titre (Français)' : 'Title (French)'}:
+							<span class="text-gray-500 font-normal text-xs ml-1">({lang === 'fr' ? 'Optionnel' : 'Optional'})</span>
+						</label>
+						<input
+							id="edit-title-fr"
+							type="text"
+							bind:value={formData.title_fr}
+							class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#1a3a5f]"
+							placeholder={lang === 'fr' ? 'Titre en français...' : 'French title...'}
 						/>
 					</div>
 				</div>

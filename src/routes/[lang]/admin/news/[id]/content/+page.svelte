@@ -4,7 +4,7 @@
 	import AdminHeader from '../../../../../../lib/components/admin/AdminHeader.svelte';
 	import AdminFooter from '../../../../../../lib/components/admin/AdminFooter.svelte';
 	import { onMount } from 'svelte';
-	import { getNewsById, updateNews as updateNewsApi } from '$lib/apis/news-api';
+	import { getNewsById, updateNews as updateNewsApi, getNews } from '$lib/apis/news-api';
 	import { CURRENT_CLUB_ID } from '$lib/clubs/currentClub.js';
 	import RichTextEditor from '$lib/components/admin/RichTextEditor.svelte';
 
@@ -43,6 +43,7 @@
 	let summary = $state('');
 	let article = $state('');
 	let slug = $state('');
+	let slugManuallyEdited = $state(false); // Track if slug was manually edited
 	/** @type {File | null} */
 	let selectedImage = $state(null);
 
@@ -95,6 +96,7 @@
 			article = news.article_fr || '';
 			slug = news.slug_fr || '';
 		}
+		slugManuallyEdited = false; // Reset when loading new language
 		selectedImage = null;
 		if (imageInput) imageInput.value = '';
 	}
@@ -119,6 +121,23 @@
 		}
 	}
 
+	// Get preview URL for selected image
+	let imagePreviewUrl = $state('');
+	
+	$effect(() => {
+		if (selectedImage) {
+			const reader = new FileReader();
+			reader.onload = (e) => {
+				if (e.target && e.target.result && typeof e.target.result === 'string') {
+					imagePreviewUrl = e.target.result;
+				}
+			};
+			reader.readAsDataURL(selectedImage);
+		} else {
+			imagePreviewUrl = '';
+		}
+	});
+
 	// Generate slug from title
 	/**
 	 * @param {string} titleText
@@ -132,12 +151,55 @@
 			.replace(/^-+|-+$/g, '');
 	}
 
+	// Check if slug is duplicate
+	/**
+	 * @param {string} slugToCheck
+	 * @param {'en' | 'fr'} language
+	 */
+	async function isSlugDuplicate(slugToCheck, language) {
+		if (!slugToCheck || !slugToCheck.trim()) return false;
+		
+		try {
+			const result = await getNews();
+			if (!result.success || !result.data) return false;
+			
+			const duplicate = result.data.find((item) => {
+				if (item.id === newsId) return false; // Exclude current news item
+				if (language === 'en') {
+					return item.slug_en && item.slug_en.toLowerCase() === slugToCheck.toLowerCase();
+				} else {
+					return item.slug_fr && item.slug_fr.toLowerCase() === slugToCheck.toLowerCase();
+				}
+			});
+			
+			return !!duplicate;
+		} catch (err) {
+			console.error('Error checking slug duplicate:', err);
+			return false; // If check fails, allow save (backend will catch it)
+		}
+	}
+
 	// Save content for current language
 	async function saveContent() {
 		if (!news) return;
 
 		if (!title.trim()) {
 			error = lang === 'fr' ? 'Le titre est requis' : 'Title is required';
+			return;
+		}
+
+		const finalSlug = slug || generateSlug(title);
+		if (!finalSlug.trim()) {
+			error = lang === 'fr' ? 'Le slug ne peut pas être vide' : 'Slug cannot be empty';
+			return;
+		}
+
+		// Check for duplicate slug
+		const isDuplicate = await isSlugDuplicate(finalSlug, selectedLanguage);
+		if (isDuplicate) {
+			error = lang === 'fr' 
+				? `Le slug "${finalSlug}" existe déjà. Veuillez utiliser un slug unique.`
+				: `The slug "${finalSlug}" already exists. Please use a unique slug.`;
 			return;
 		}
 
@@ -153,7 +215,7 @@
 				updateData.title_en = title;
 				updateData.summary_en = summary || undefined;
 				updateData.article_en = article || undefined;
-				updateData.slug_en = slug || generateSlug(title);
+				updateData.slug_en = finalSlug;
 				if (selectedImage) {
 					updateData.image_en = selectedImage;
 					// Thumbnail is auto-generated from image
@@ -162,7 +224,7 @@
 				updateData.title_fr = title;
 				updateData.summary_fr = summary || undefined;
 				updateData.article_fr = article || undefined;
-				updateData.slug_fr = slug || generateSlug(title);
+				updateData.slug_fr = finalSlug;
 				if (selectedImage) {
 					updateData.image_fr = selectedImage;
 					// Thumbnail is auto-generated from image
@@ -292,8 +354,11 @@
 							bind:value={title}
 							oninput={(e) => {
 								const target = e.target;
-								if (target && target instanceof HTMLInputElement && !slug) {
-									slug = generateSlug(target.value);
+								if (target && target instanceof HTMLInputElement) {
+									// Auto-generate slug from title if not manually edited
+									if (!slugManuallyEdited) {
+										slug = generateSlug(target.value);
+									}
 								}
 							}}
 							class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#1a3a5f]"
@@ -310,9 +375,24 @@
 							id="content-slug"
 							type="text"
 							bind:value={slug}
+							oninput={() => {
+								// Mark slug as manually edited when user types in it
+								slugManuallyEdited = true;
+							}}
+							onfocus={() => {
+								// If slug is empty or matches auto-generated, allow manual edit
+								if (!slug || slug === generateSlug(title)) {
+									slugManuallyEdited = true;
+								}
+							}}
 							class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-[#1a3a5f]"
 							placeholder={selectedLanguage === 'en' ? 'url-friendly-slug' : 'slug-url-friendly'}
 						/>
+						<p class="text-xs text-gray-500 mt-1">
+							{selectedLanguage === 'en'
+								? 'Auto-generated from title. You can edit it manually if needed.'
+								: 'Généré automatiquement à partir du titre. Vous pouvez le modifier manuellement si nécessaire.'}
+						</p>
 					</div>
 
 					<!-- Summary -->
@@ -348,7 +428,16 @@
 								: 'La miniature sera générée automatiquement à partir de cette image'}
 						</p>
 						{#if selectedImage}
-							<p class="text-sm text-gray-600 mt-1">{selectedImage.name}</p>
+							<div class="mt-3">
+								<p class="text-sm text-gray-600 mb-2">{selectedImage.name}</p>
+								{#if imagePreviewUrl}
+									<img
+										src={imagePreviewUrl}
+										alt="Preview"
+										class="w-48 h-32 object-cover rounded border-2 border-gray-300"
+									/>
+								{/if}
+							</div>
 						{:else if (selectedLanguage === 'en' && news.image_en)}
 							<div class="mt-2">
 								<p class="text-sm text-gray-500 mb-1">Current:</p>

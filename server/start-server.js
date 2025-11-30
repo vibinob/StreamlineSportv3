@@ -952,6 +952,51 @@ app.put('/api/gallery/:id', async (req, res) => {
 		}
 	});
 
+	// GET /api/news/images - Get list of uploaded images
+	app.get('/api/news/images', async (req, res) => {
+		const { club_id } = req.query;
+		console.log('[News Images API] GET request, Club ID:', club_id);
+
+		if (!club_id) {
+			return res.status(400).json({ success: false, error: 'Club ID is required' });
+		}
+
+		try {
+			const { basePath } = getNewsImagesPath(club_id);
+			
+			if (!fs.existsSync(basePath)) {
+				return res.json({ success: true, images: [] });
+			}
+
+			const files = await fs.promises.readdir(basePath);
+			const imageList = await Promise.all(
+				files
+					.filter(filename => {
+						const ext = path.extname(filename).toLowerCase();
+						return ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'].includes(ext);
+					})
+					.map(async (filename) => {
+						const filePath = path.join(basePath, filename);
+						const stats = await fs.promises.stat(filePath);
+						return {
+							filename,
+							url: `/images/clubs/${club_id}/news/${filename}`,
+							size: stats.size
+						};
+					})
+			);
+
+			// Sort by filename
+			imageList.sort((a, b) => a.filename.localeCompare(b.filename));
+
+			console.log('[News Images API] Found', imageList.length, 'images');
+			res.json({ success: true, images: imageList });
+		} catch (error) {
+			console.error('[News Images API] Error:', error);
+			res.status(500).json({ success: false, error: error.message });
+		}
+	});
+
 	// POST /api/news/upload-file - Upload file for rich text editor
 	app.post('/api/news/upload-file', uploadFile.single('file'), async (req, res) => {
 		const { club_id } = req.body;
@@ -1133,6 +1178,46 @@ app.put('/api/gallery/:id', async (req, res) => {
 		}
 	});
 
+	// Helper function to generate slug from title
+	function generateSlug(title) {
+		if (!title || typeof title !== 'string') return '';
+		return title
+			.toLowerCase()
+			.trim()
+			.replace(/[^\w\s-]/g, '')
+			.replace(/[\s_-]+/g, '-')
+			.replace(/^-+|-+$/g, '');
+	}
+
+	// Helper function to ensure slug is unique by appending a number if needed
+	async function ensureUniqueSlug(baseSlug, languageId, excludeNewsId = null) {
+		if (!baseSlug || !baseSlug.trim()) return baseSlug;
+		
+		let uniqueSlug = baseSlug.trim();
+		let counter = 1;
+		
+		// Check if slug exists
+		let checkQuery = `SELECT id FROM news_content WHERE slug_url = ? AND language_id = ? AND status != 2`;
+		let checkParams = [uniqueSlug, languageId];
+		
+		if (excludeNewsId) {
+			checkQuery += ` AND news_id != ?`;
+			checkParams.push(excludeNewsId);
+		}
+		
+		let existing = await query(checkQuery, checkParams);
+		
+		// If slug exists, append a number until we find a unique one
+		while (existing.length > 0) {
+			counter++;
+			uniqueSlug = `${baseSlug.trim()}-${counter}`;
+			checkParams[0] = uniqueSlug;
+			existing = await query(checkQuery, checkParams);
+		}
+		
+		return uniqueSlug;
+	}
+
 	// POST /api/news - Create new news with bilingual content
 	app.post('/api/news', upload.fields([
 		{ name: 'image_en', maxCount: 1 },
@@ -1162,6 +1247,9 @@ app.put('/api/gallery/:id', async (req, res) => {
 			slug_fr,
 			added_by
 		} = req.body;
+		
+		console.log('[News API] Title EN:', title_en, 'Type:', typeof title_en);
+		console.log('[News API] Title FR:', title_fr, 'Type:', typeof title_fr);
 
 		if (!club_id) {
 			console.error('[News API] Missing club_id. Received body:', req.body);
@@ -1282,8 +1370,12 @@ app.put('/api/gallery/:id', async (req, res) => {
 			const newsId = newsResult.insertId;
 			console.log('[News API] Created news with ID:', newsId, 'Order:', newOrder);
 
-			// Insert English content if provided
-			if (title_en) {
+			// Insert English content if provided (check for non-empty string)
+			if (title_en !== undefined && title_en !== null && title_en.trim() !== '') {
+				// Auto-generate slug if title is provided but slug is not
+				const baseSlugEn = slug_en && slug_en.trim() ? slug_en.trim() : generateSlug(title_en);
+				const finalSlugEn = baseSlugEn ? await ensureUniqueSlug(baseSlugEn, 1, null) : null;
+				
 				await query(
 					`INSERT INTO news_content (news_id, language_id, title, summary, article, image_filename, image_thumbnail, slug_url, date_added, added_by, status) 
 					VALUES (?, 1, ?, ?, ?, ?, ?, ?, NOW(), ?, 1)`,
@@ -1294,15 +1386,19 @@ app.put('/api/gallery/:id', async (req, res) => {
 						article_en || null,
 						imageEnFilename || null,
 						thumbnailEnFilename || null,
-						slug_en || null,
+						finalSlugEn || null,
 						added_by || null
 					]
 				);
-				console.log('[News API] Created English content for news ID:', newsId);
+				console.log('[News API] Created English content for news ID:', newsId, 'Slug:', finalSlugEn);
 			}
 
-			// Insert French content if provided
-			if (title_fr) {
+			// Insert French content if provided (check for non-empty string)
+			if (title_fr !== undefined && title_fr !== null && title_fr.trim() !== '') {
+				// Auto-generate slug if title is provided but slug is not
+				const baseSlugFr = slug_fr && slug_fr.trim() ? slug_fr.trim() : generateSlug(title_fr);
+				const finalSlugFr = baseSlugFr ? await ensureUniqueSlug(baseSlugFr, 2, null) : null;
+				
 				await query(
 					`INSERT INTO news_content (news_id, language_id, title, summary, article, image_filename, image_thumbnail, slug_url, date_added, added_by, status) 
 					VALUES (?, 2, ?, ?, ?, ?, ?, ?, NOW(), ?, 1)`,
@@ -1313,11 +1409,11 @@ app.put('/api/gallery/:id', async (req, res) => {
 						article_fr || null,
 						imageFrFilename || null,
 						thumbnailFrFilename || null,
-						slug_fr || null,
+						finalSlugFr || null,
 						added_by || null
 					]
 				);
-				console.log('[News API] Created French content for news ID:', newsId);
+				console.log('[News API] Created French content for news ID:', newsId, 'Slug:', finalSlugFr);
 			}
 
 			res.json({ success: true, data: { id: newsId } });
@@ -1559,9 +1655,19 @@ app.put('/api/gallery/:id', async (req, res) => {
 						contentFields.push('image_thumbnail = ?');
 						contentValues.push(thumbnailEnFilename);
 					}
-					if (slug_en !== undefined) {
+					// Auto-generate slug if title is updated but slug is not provided
+					let baseSlugEn = null;
+					if (title_en !== undefined && (slug_en === undefined || slug_en === null || slug_en === '')) {
+						baseSlugEn = generateSlug(title_en);
+					} else if (slug_en && slug_en.trim()) {
+						baseSlugEn = slug_en.trim();
+					}
+					
+					if (slug_en !== undefined || (title_en !== undefined && baseSlugEn)) {
+						// Ensure slug is unique (excluding current news item)
+						const finalSlugEn = baseSlugEn ? await ensureUniqueSlug(baseSlugEn, 1, id) : null;
 						contentFields.push('slug_url = ?');
-						contentValues.push(slug_en || null);
+						contentValues.push(finalSlugEn || null);
 					}
 					if (updated_by !== undefined) {
 						contentFields.push('updated_by = ?');
@@ -1577,6 +1683,10 @@ app.put('/api/gallery/:id', async (req, res) => {
 						);
 					}
 				} else if (title_en) {
+					// Auto-generate slug if title is provided but slug is not
+					const baseSlugEn = slug_en && slug_en.trim() ? slug_en.trim() : generateSlug(title_en);
+					const finalSlugEn = baseSlugEn ? await ensureUniqueSlug(baseSlugEn, 1, id) : null;
+					
 					// Insert new English content
 					await query(
 						`INSERT INTO news_content (news_id, language_id, title, summary, article, image_filename, image_thumbnail, slug_url, date_added, added_by, status) 
@@ -1588,7 +1698,7 @@ app.put('/api/gallery/:id', async (req, res) => {
 							article_en || null,
 							imageEnFilename || null,
 							thumbnailEnFilename || null,
-							slug_en || null,
+							finalSlugEn || null,
 							updated_by || null
 						]
 					);
@@ -1620,9 +1730,19 @@ app.put('/api/gallery/:id', async (req, res) => {
 						contentFields.push('image_thumbnail = ?');
 						contentValues.push(thumbnailFrFilename);
 					}
-					if (slug_fr !== undefined) {
+					// Auto-generate slug if title is updated but slug is not provided
+					let baseSlugFr = null;
+					if (title_fr !== undefined && (slug_fr === undefined || slug_fr === null || slug_fr === '')) {
+						baseSlugFr = generateSlug(title_fr);
+					} else if (slug_fr && slug_fr.trim()) {
+						baseSlugFr = slug_fr.trim();
+					}
+					
+					if (slug_fr !== undefined || (title_fr !== undefined && baseSlugFr)) {
+						// Ensure slug is unique (excluding current news item)
+						const finalSlugFr = baseSlugFr ? await ensureUniqueSlug(baseSlugFr, 2, id) : null;
 						contentFields.push('slug_url = ?');
-						contentValues.push(slug_fr || null);
+						contentValues.push(finalSlugFr || null);
 					}
 					if (updated_by !== undefined) {
 						contentFields.push('updated_by = ?');
@@ -1638,6 +1758,10 @@ app.put('/api/gallery/:id', async (req, res) => {
 						);
 					}
 				} else if (title_fr) {
+					// Auto-generate slug if title is provided but slug is not
+					const baseSlugFr = slug_fr && slug_fr.trim() ? slug_fr.trim() : generateSlug(title_fr);
+					const finalSlugFr = baseSlugFr ? await ensureUniqueSlug(baseSlugFr, 2, id) : null;
+					
 					// Insert new French content
 					await query(
 						`INSERT INTO news_content (news_id, language_id, title, summary, article, image_filename, image_thumbnail, slug_url, date_added, added_by, status) 
@@ -1649,7 +1773,7 @@ app.put('/api/gallery/:id', async (req, res) => {
 							article_fr || null,
 							imageFrFilename || null,
 							thumbnailFrFilename || null,
-							slug_fr || null,
+							finalSlugFr || null,
 							updated_by || null
 						]
 					);
