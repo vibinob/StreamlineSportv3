@@ -1,10 +1,21 @@
 <script>
 	import { page } from '$app/stores';
-	import { t } from '$lib/i18n/index.js';
+	import { goto } from '$app/navigation';
+	import * as m from '$lib/paraglide/messages';
+	import { languageTagStore } from '$lib/paraglide/runtime';
+	import { get } from 'svelte/store';
 	import LanguageSwitcher from './LanguageSwitcher.svelte';
+	import { CURRENT_CLUB_ID } from '$lib/clubs/currentClub.js';
 
 	let mobileMenuOpen = $state(false);
 	let languageDropdownOpen = $state(false);
+
+	// Menu state loaded from backend API
+	/** @type {{ id:number; parentId:number|null; title:string; url:string; pageTypeId:number; sortOrder:number; children:any[] }[]} */
+	let menuItems = $state([]);
+	let menuLoading = $state(false);
+	/** @type {string | null} */
+	let menuError = $state(null);
 
 	const lang = $derived.by(() => {
 		const paramLang = $page.params.lang;
@@ -14,12 +25,96 @@
 		return 'fr';
 	});
 
+	// Current path, used to highlight the active menu item.
+	const currentPath = $derived.by(() => $page.url.pathname);
+
+	import { fetchMenu } from '$lib/apis/menu-api';
+
+	/**
+	 * Build href for a menu entry, prefixing with language when needed
+	 * @param {string} itemUrl
+	 */
+	function buildHref(itemUrl) {
+		if (!itemUrl) return `/${lang}`;
+		if (itemUrl.startsWith('http://') || itemUrl.startsWith('https://')) {
+			return itemUrl;
+		}
+		// URLs starting with '/' are treated as app-relative, we prefix with lang
+		if (itemUrl.startsWith('/')) {
+			return `/${lang}${itemUrl}`;
+		}
+		// Fallback: treat as path segment
+		return `/${lang}/${itemUrl}`;
+	}
+
+	// Subscribe to language tag store to make messages reactive
+	// This ensures components re-render when language changes
+	const languageStore = languageTagStore();
+	
+	// Track language changes reactively
+	let _langTracker = $state(get(languageStore));
+	const initialLang = get(languageStore);
+	// Initialize the global language tag
+	m.setCurrentLanguageTag(initialLang);
+	
+	$effect(() => {
+		const unsubscribe = languageStore.subscribe(value => {
+			_langTracker = value;
+			// Update the global language tag in messages module
+			m.setCurrentLanguageTag(value);
+		});
+		return unsubscribe;
+	});
+	
+	// Helper function to get translations with current language
+	/**
+	 * @param {(lang: import('$lib/paraglide/runtime').LanguageTag) => string} fn
+	 * @returns {string}
+	 */
+	const t = (fn) => fn(_langTracker);
+	
+	// Force reactivity - reference _langTracker in template to ensure tracking
+	// This ensures message functions are called again when language changes
+
+	// Load menu from backend whenever club or language changes
+	$effect(() => {
+		menuLoading = true;
+		menuError = null;
+
+		fetchMenu(lang)
+			.then((data) => {
+				if (!data || !data.success) {
+					menuError = data?.error || 'Failed to load menu';
+					menuItems = [];
+					return;
+				}
+				menuItems = Array.isArray(data.data) ? data.data : [];
+			})
+			.catch((err) => {
+				console.error('Menu fetch error:', err);
+				menuError = err instanceof Error ? err.message : 'Failed to load menu';
+				menuItems = [];
+			})
+			.finally(() => {
+				menuLoading = false;
+			});
+	});
+
 	function toggleMobileMenu() {
 		mobileMenuOpen = !mobileMenuOpen;
 	}
 
+	function handleNavClick() {
+		// Close mobile menu after navigating on small screens
+		mobileMenuOpen = false;
+	}
+
 	function toggleLanguageDropdown() {
 		languageDropdownOpen = !languageDropdownOpen;
+	}
+
+	function handleLoginClick() {
+		goto(`/${lang}/login`);
 	}
 </script>
 
@@ -87,11 +182,12 @@
 				</a>
 			</div>
 
-			<!-- User Icon (Blue) -->
+			<!-- User Icon (Blue) - Login Button -->
 			<button
 				type="button"
+				onclick={handleLoginClick}
 				class="bg-transparent border-0 p-0 cursor-pointer text-blue-600 hover:text-blue-700 transition-colors"
-				aria-label={t(lang, 'topBar.member')}
+				aria-label={t(m.topBar_member)}
 			>
 				<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="currentColor" viewBox="0 0 24 24">
 					<path
@@ -135,7 +231,8 @@
 					<span class="w-6 h-0.5 bg-white my-1 transition-all"></span>
 				</button>
 				<ul
-					class="hidden md:flex list-none m-0 p-0 gap-0 items-center justify-end"
+					class="list-none m-0 p-0 gap-0 items-center justify-end"
+					class:hidden={!mobileMenuOpen}
 					class:flex={mobileMenuOpen}
 					class:flex-col={mobileMenuOpen}
 					class:absolute={mobileMenuOpen}
@@ -145,79 +242,31 @@
 					class:bg-black={mobileMenuOpen}
 					class:shadow-md={mobileMenuOpen}
 					class:z-[1000]={mobileMenuOpen}
+					class:md:flex={true}
+					class:md:static={true}
+					class:md:bg-transparent={true}
+					class:md:shadow-none={true}
 				>
-					<li class="relative">
-						<a
-							href="/{lang}"
-							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
-						>
-							{t(lang, 'nav.home')}
-						</a>
-					</li>
-					<li class="relative">
-						<a
-							href="/{lang}/our-program"
-							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-[#F45E12] transition-colors hover:border-[#F45E12]"
-						>
-							{t(lang, 'nav.ourProgram')}
-						</a>
-					</li>
-					<li class="relative">
-						<a
-							href="/{lang}/our-meets"
-							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
-						>
-							{t(lang, 'nav.ourMeets')}
-						</a>
-					</li>
-					<li class="relative">
-						<a
-							href="/{lang}/tryouts"
-							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
-						>
-							{t(lang, 'nav.tryouts')}
-						</a>
-					</li>
-					<li class="relative">
-						<a
-							href="/{lang}/club-records"
-							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
-						>
-							{t(lang, 'nav.clubRecords')}
-						</a>
-					</li>
-					<li class="relative">
-						<a
-							href="/{lang}/coaches"
-							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
-						>
-							{t(lang, 'nav.coaches')}
-						</a>
-					</li>
-					<li class="relative">
-						<a
-							href="/{lang}/news"
-							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
-						>
-							{t(lang, 'nav.news')}
-						</a>
-					</li>
-					<li class="relative">
-						<a
-							href="/{lang}/gallery"
-							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
-						>
-							{t(lang, 'nav.gallery')}
-						</a>
-					</li>
-					<li class="relative">
-						<a
-							href="/{lang}/contact"
-							class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
-						>
-							{t(lang, 'nav.contact')}
-						</a>
-					</li>
+					{#if menuLoading}
+						<li class="px-4 py-3 text-white text-sm">Loading...</li>
+					{:else if menuError}
+						<li class="px-4 py-3 text-red-400 text-sm">Menu error</li>
+					{:else}
+						{#each menuItems as item}
+							{#if item}
+								<li class="relative">
+									<a
+										href={buildHref(item.url)}
+										onclick={handleNavClick}
+										class="block px-4 py-3 text-white no-underline font-roboto text-sm font-bold uppercase border-b-2 border-transparent transition-colors hover:border-[#F45E12]"
+										class:border-[#F45E12]={currentPath === buildHref(item.url) || currentPath.startsWith(buildHref(item.url) + '/')}
+									>
+										{item.title}
+									</a>
+								</li>
+							{/if}
+						{/each}
+					{/if}
 				</ul>
 			</nav>
 		</div>

@@ -10,6 +10,7 @@
 		"sourceMap": true,
 		"strict": true,
 		"moduleResolution": "bundler",
+		"allowArbitraryExtensions": true,
 		"types": ["@sveltejs/kit"]
 	},
 	"include": ["src/**/*.ts", "src/**/*.svelte", "src/lib/types/**/*.d.ts"]

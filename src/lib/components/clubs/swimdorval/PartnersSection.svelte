@@ -1,6 +1,8 @@
 <script>
 	import { page } from '$app/stores';
-	import { t } from '$lib/i18n/index.js';
+	import * as m from '$lib/paraglide/messages';
+	import { languageTagStore } from '$lib/paraglide/runtime';
+	import { get } from 'svelte/store';
 
 	const lang = $derived.by(() => {
 		const paramLang = $page.params.lang;
@@ -9,6 +11,28 @@
 		}
 		return 'fr';
 	});
+
+	// Subscribe to language tag store to make messages reactive
+	const languageStore = languageTagStore();
+	let _langTracker = $state(get(languageStore));
+	const initialLang = get(languageStore);
+	// Initialize the global language tag
+	m.setCurrentLanguageTag(initialLang);
+	
+	$effect(() => {
+		return languageStore.subscribe(value => {
+			_langTracker = value;
+			// Update the global language tag in messages module
+			m.setCurrentLanguageTag(value);
+		});
+	});
+	
+	// Helper function to get translations with current language
+	/**
+	 * @param {(lang: import('$lib/paraglide/runtime').LanguageTag) => string} fn
+	 * @returns {string}
+	 */
+	const t = (fn) => fn(_langTracker);
 
 	const partners = [
 		{ id: 1, logo: 'https://placehold.co/150x100/E0E0E0/666666?text=Partner+1' },
@@ -23,8 +47,10 @@
 
 <!-- Partners Section -->
 <section class="py-12 bg-[#F4F4F4] text-center">
+	<!-- Hidden element to track language changes -->
+	<span style="display: none;">{_langTracker}</span>
 	<div class="container mx-auto px-4 max-w-7xl">
-		<h2 class="font-roboto text-3xl text-black mb-8">{t(lang, 'partners.title')}</h2>
+		<h2 class="font-roboto text-3xl text-black mb-8">{t(m.partners_title)}</h2>
 		<div class="flex justify-center items-center flex-wrap gap-5 md:gap-8 p-5">
 			{#each partners as partner}
 				<div class="flex-none">
